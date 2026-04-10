@@ -90,7 +90,7 @@ export function generatePrescriptionPDF({ doctor, patient, prescriptionData: pd 
   const doc = new jsPDF();
   const pw = doc.internal.pageSize.getWidth();
 
-  let y = drawDoctorHeader(doc, doctor, `Receituário ${pd.productType}`);
+  let y = drawDoctorHeader(doc, doctor, "Receituário Médico");
 
   // Paciente
   doc.setFontSize(10);
@@ -113,7 +113,7 @@ export function generatePrescriptionPDF({ doctor, patient, prescriptionData: pd 
   doc.setFont("helvetica", "bold");
   doc.text("PRODUTO PRESCRITO", 20, y); y += 6;
   doc.setFont("helvetica", "normal");
-  doc.text(`${pd.product} — 7237 mg/30 mL — ${pd.productType}`, 20, y); y += 8;
+  doc.text(`Canabidiol Greenlion ${pd.product} 7237mg`, 20, y); y += 8;
 
   // Posologia
   doc.setFont("helvetica", "bold");
