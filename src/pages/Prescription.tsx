@@ -103,17 +103,18 @@ export default function Prescription() {
     };
 
     // Save to DB
-    const { error } = await supabase.from("prescriptions").insert({
+    const insertData = {
       doctor_id: user.id,
       patient_id: patient.id,
       pathology: selectedPathology,
       product: selectedProduct.name,
       dose_per_kg: dosePerKg,
       calculated_dose: calculatedDose,
-      titulation_protocol: titulationSteps as unknown as Record<string, unknown>,
+      titulation_protocol: JSON.parse(JSON.stringify(titulationSteps)),
       tcle_accepted: tcleAccepted,
-      prescription_data: prescriptionData as unknown as Record<string, unknown>,
-    });
+      prescription_data: JSON.parse(JSON.stringify(prescriptionData)),
+    };
+    const { error } = await supabase.from("prescriptions").insert(insertData);
 
     if (error) {
       toast.error("Erro ao salvar receita: " + error.message);
