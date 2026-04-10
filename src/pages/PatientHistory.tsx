@@ -60,7 +60,6 @@ export default function PatientHistory() {
       doctor,
       patient,
       prescriptionData: pd,
-      tcleAccepted: presc.tcle_accepted,
     });
   };
 
