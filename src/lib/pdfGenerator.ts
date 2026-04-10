@@ -43,14 +43,25 @@ export function generatePrescriptionPDF({ doctor, patient, prescriptionData, tcl
   const pageWidth = doc.internal.pageSize.getWidth();
   let y = 20;
 
-  // Header
-  doc.setFontSize(18);
-  doc.setTextColor(29, 158, 117); // #1D9E75
-  doc.text("Greenlion Precision", pageWidth / 2, y, { align: "center" });
-  y += 8;
+  // Header — Doctor's own letterhead
+  doc.setFontSize(16);
+  doc.setTextColor(29, 78, 60);
+  doc.text(`Dr(a). ${doctor.full_name}`, pageWidth / 2, y, { align: "center" });
+  y += 6;
   doc.setFontSize(10);
+  doc.setTextColor(80);
+  doc.text(`${doctor.specialty} — CRM: ${doctor.crm}`, pageWidth / 2, y, { align: "center" });
+  y += 5;
+  if (doctor.phone || doctor.address) {
+    doc.setFontSize(8);
+    doc.setTextColor(120);
+    const contactInfo = [doctor.phone, doctor.address].filter(Boolean).join(" | ");
+    doc.text(contactInfo, pageWidth / 2, y, { align: "center" });
+    y += 5;
+  }
+  doc.setFontSize(9);
   doc.setTextColor(100);
-  doc.text("Guia de Prescrição — Cannabis Medicinal", pageWidth / 2, y, { align: "center" });
+  doc.text("Receituário — Cannabis Medicinal", pageWidth / 2, y, { align: "center" });
   y += 4;
   doc.setDrawColor(29, 158, 117);
   doc.setLineWidth(0.5);
@@ -138,7 +149,7 @@ export function generatePrescriptionPDF({ doctor, patient, prescriptionData, tcl
 
   doc.setFontSize(7);
   doc.setTextColor(150);
-  doc.text(`Data de emissão: ${new Date().toLocaleDateString("pt-BR")} | Greenlion Precision — Guia de Prescrição`, pageWidth / 2, y, { align: "center" });
+  doc.text(`Data de emissão: ${new Date().toLocaleDateString("pt-BR")} | Dr(a). ${doctor.full_name} — CRM: ${doctor.crm}`, pageWidth / 2, y, { align: "center" });
 
   doc.save(`receita_${patient.full_name.replace(/\s/g, "_")}_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
