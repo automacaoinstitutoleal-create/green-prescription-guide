@@ -14,6 +14,47 @@ export type Database = {
   }
   public: {
     Tables: {
+      annotations: {
+        Row: {
+          created_at: string
+          current_dose: string | null
+          date: string
+          doctor_id: string
+          id: string
+          patient_id: string
+          text: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_dose?: string | null
+          date?: string
+          doctor_id: string
+          id?: string
+          patient_id: string
+          text?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_dose?: string | null
+          date?: string
+          doctor_id?: string
+          id?: string
+          patient_id?: string
+          text?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "annotations_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       doctor_profiles: {
         Row: {
           address: string | null

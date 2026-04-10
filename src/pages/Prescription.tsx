@@ -5,17 +5,20 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, Check, Download } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Download, AlertTriangle } from "lucide-react";
 import {
-  PATHOLOGIES, PRODUCTS, PATHOLOGY_PRODUCT_MAP,
-  calculateDose, calculateVolume, generateTitulationProtocol,
-  type Pathology, type Product, type TitulationStep,
+  PATHOLOGIES, PRODUCTS,
+  getDoseRange, mgDayToDropsDay, dropsToBottlesPerMonth, calcBottles,
+  generateTitulationProtocol,
+  type PathologyInfo, type Product, type TitulationStep,
 } from "@/lib/prescriptionData";
-import { generatePrescriptionPDF } from "@/lib/pdfGenerator";
+import { generatePrescriptionPDF, generatePatientGuidePDF } from "@/lib/pdfGenerator";
 
 interface Patient {
   id: string;
@@ -46,13 +49,27 @@ export default function Prescription() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Prescription state
-  const [selectedPathology, setSelectedPathology] = useState<Pathology | "">("");
+  // Step 1 - Doctor (editable for this prescription)
+  const [editDoctor, setEditDoctor] = useState({ full_name: "", crm: "", specialty: "", phone: "", address: "" });
+
+  // Step 3 - Pathology
+  const [selectedPathology, setSelectedPathology] = useState<PathologyInfo | null>(null);
+
+  // Step 4 - Product
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [dosePerKg, setDosePerKg] = useState(0);
-  const [calculatedDose, setCalculatedDose] = useState(0);
+
+  // Step 5 - Posology
+  const [intervalDays, setIntervalDays] = useState(7);
+  const [via, setVia] = useState("sublingual");
+  const [initialDrops, setInitialDrops] = useState(2);
   const [titulationSteps, setTitulationSteps] = useState<TitulationStep[]>([]);
-  const [tcleAccepted, setTcleAccepted] = useState(false);
+  const [durationMonths, setDurationMonths] = useState(1);
+  const [bottleBasis, setBottleBasis] = useState<"target" | "max" | "initial">("target");
+  const [editableBottles, setEditableBottles] = useState(1);
+
+  // Step 6 - Editable fields for documents
+  const [editDiagnosis, setEditDiagnosis] = useState("");
+  const [editQuantity, setEditQuantity] = useState("");
 
   useEffect(() => {
     if (!user || !patientId) return;
@@ -61,61 +78,90 @@ export default function Prescription() {
       supabase.from("doctor_profiles").select("full_name, crm, specialty, phone, address").eq("user_id", user.id).single(),
     ]).then(([patRes, docRes]) => {
       if (patRes.data) setPatient(patRes.data);
-      if (docRes.data) setDoctor(docRes.data);
+      if (docRes.data) {
+        setDoctor(docRes.data);
+        setEditDoctor({
+          full_name: docRes.data.full_name,
+          crm: docRes.data.crm,
+          specialty: docRes.data.specialty,
+          phone: docRes.data.phone || "",
+          address: docRes.data.address || "",
+        });
+      }
       setLoading(false);
     });
   }, [user, patientId]);
 
-  // When pathology changes, reset product
+  // Recalculate titulation when relevant deps change
   useEffect(() => {
+    if (!selectedProduct || !selectedPathology || !patient?.weight) return;
+    const range = getDoseRange(selectedPathology, patient.weight);
+    const steps = generateTitulationProtocol(
+      initialDrops, selectedProduct, patient.weight, range.target, range.max, intervalDays
+    );
+    setTitulationSteps(steps);
+
+    // Calculate bottles
+    const targetStep = steps.find(s => s.status === "target");
+    const basisDrops = bottleBasis === "initial" ? initialDrops * 2
+      : bottleBasis === "max" ? (steps[steps.length - 1]?.dropsPerDay ?? initialDrops * 2)
+      : (targetStep?.dropsPerDay ?? initialDrops * 2);
+    const bottles = calcBottles(basisDrops, selectedProduct, durationMonths);
+    setEditableBottles(bottles);
+  }, [selectedProduct, selectedPathology, patient?.weight, initialDrops, intervalDays, durationMonths, bottleBasis]);
+
+  // Set edit fields when pathology changes
+  useEffect(() => {
+    if (selectedPathology) {
+      setEditDiagnosis(`${selectedPathology.name} (CID-10: ${selectedPathology.cid10})`);
+    }
     setSelectedProduct(null);
   }, [selectedPathology]);
 
-  // When product changes, recalculate
   useEffect(() => {
-    if (selectedProduct && patient?.weight) {
-      const dpk = selectedProduct.defaultDosePerKg;
-      setDosePerKg(dpk);
-      const dose = calculateDose(patient.weight, dpk);
-      setCalculatedDose(dose);
-      const initialDose = dose / 4; // start at 25% of target
-      setTitulationSteps(generateTitulationProtocol(initialDose, dose, selectedProduct.concentration));
+    if (selectedProduct && selectedPathology && patient?.weight) {
+      const range = getDoseRange(selectedPathology, patient.weight);
+      const targetDrops = mgDayToDropsDay(range.target, selectedProduct);
+      setEditQuantity(`${editableBottles} frasco(s) de 30 mL — ${durationMonths} mês(es)`);
     }
-  }, [selectedProduct, patient?.weight]);
+  }, [editableBottles, durationMonths]);
 
-  const recommendedProducts = selectedPathology
-    ? PRODUCTS.filter((p) => PATHOLOGY_PRODUCT_MAP[selectedPathology]?.includes(p.name))
-    : [];
-
-  const handleSaveAndDownload = async () => {
+  const handleSaveAndDownload = async (docType: "receita" | "guia" | "ambos") => {
     if (!user || !patient || !doctor || !selectedProduct || !selectedPathology) return;
     setSaving(true);
 
+    const range = getDoseRange(selectedPathology, patient.weight || 0);
     const prescriptionData = {
-      pathology: selectedPathology,
+      pathology: selectedPathology.name,
+      cid10: selectedPathology.cid10,
       product: selectedProduct.name,
-      productType: selectedProduct.type,
-      dosePerKg,
-      calculatedDose,
-      concentration: selectedProduct.concentration,
+      productType: selectedProduct.typeLabel,
+      doseStart: range.start,
+      doseTarget: range.target,
+      doseMax: range.max,
       titulationSteps,
       patientWeight: patient.weight,
+      intervalDays,
+      via,
+      initialDrops,
+      durationMonths,
+      bottles: editableBottles,
+      mgPerDrop: +((selectedProduct.mgMl * selectedProduct.cbdPct) / selectedProduct.dropsPerMl).toFixed(2),
     };
 
-    // Save to DB
     const insertData = {
       doctor_id: user.id,
       patient_id: patient.id,
-      pathology: selectedPathology,
+      pathology: selectedPathology.name,
       product: selectedProduct.name,
-      dose_per_kg: dosePerKg,
-      calculated_dose: calculatedDose,
+      dose_per_kg: selectedPathology.doseType === "mg_kg" ? selectedPathology.doseTarget : null,
+      calculated_dose: range.target,
       titulation_protocol: JSON.parse(JSON.stringify(titulationSteps)),
-      tcle_accepted: tcleAccepted,
+      tcle_accepted: docType === "guia" || docType === "ambos",
       prescription_data: JSON.parse(JSON.stringify(prescriptionData)),
     };
-    const { error } = await supabase.from("prescriptions").insert(insertData);
 
+    const { error } = await supabase.from("prescriptions").insert(insertData);
     if (error) {
       toast.error("Erro ao salvar receita: " + error.message);
       setSaving(false);
@@ -123,8 +169,14 @@ export default function Prescription() {
     }
 
     try {
-      generatePrescriptionPDF({ doctor, patient, prescriptionData, tcleAccepted });
-      toast.success("Receita salva e PDF gerado!");
+      const pdfDoctor = editDoctor;
+      if (docType === "receita" || docType === "ambos") {
+        generatePrescriptionPDF({ doctor: pdfDoctor, patient, prescriptionData });
+      }
+      if (docType === "guia" || docType === "ambos") {
+        generatePatientGuidePDF({ doctor: pdfDoctor, patient, prescriptionData, product: selectedProduct });
+      }
+      toast.success("Receita salva e PDF(s) gerado(s)!");
     } catch (e) {
       console.error("Erro ao gerar PDF:", e);
       toast.error("Receita salva, mas houve erro ao gerar o PDF.");
@@ -149,9 +201,12 @@ export default function Prescription() {
     );
   }
 
+  const weight = patient.weight || 0;
+  const doseRange = selectedPathology ? getDoseRange(selectedPathology, weight) : null;
+
   return (
     <div className="min-h-screen bg-secondary/20 p-4">
-      <div className="mx-auto max-w-3xl">
+      <div className="mx-auto max-w-4xl">
         <Button variant="ghost" onClick={() => navigate("/")} className="mb-4">
           <ArrowLeft className="h-4 w-4 mr-1" /> Voltar ao Dashboard
         </Button>
@@ -162,257 +217,421 @@ export default function Prescription() {
             <div key={s} className={`h-2 flex-1 rounded-full ${s <= step ? "bg-primary" : "bg-border"}`} />
           ))}
         </div>
-        <p className="text-sm text-muted-foreground mb-4">Etapa {step} de 6 — Paciente: {patient.full_name}</p>
+        <p className="text-sm text-muted-foreground mb-4">Etapa {step} de 6</p>
 
-        {/* Step 1: Pathology */}
+        {/* ═══ Step 1: Médico ═══ */}
         {step === 1 && (
           <Card>
             <CardHeader>
-              <CardTitle>1. Selecionar Patologia</CardTitle>
-              <CardDescription>Escolha a condição clínica do paciente</CardDescription>
+              <CardTitle>1. Dados do Médico</CardTitle>
+              <CardDescription>Dados pré-preenchidos do seu perfil. Edite se necessário para esta receita.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Select value={selectedPathology} onValueChange={(v) => setSelectedPathology(v as Pathology)}>
-                <SelectTrigger><SelectValue placeholder="Selecione a patologia" /></SelectTrigger>
-                <SelectContent>
-                  {PATHOLOGIES.map((p) => (
-                    <SelectItem key={p} value={p}>{p}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <Label>Nome completo</Label>
+                  <Input value={editDoctor.full_name} onChange={e => setEditDoctor({...editDoctor, full_name: e.target.value})} />
+                </div>
+                <div>
+                  <Label>CRM</Label>
+                  <Input value={editDoctor.crm} onChange={e => setEditDoctor({...editDoctor, crm: e.target.value})} />
+                </div>
+                <div>
+                  <Label>Especialidade</Label>
+                  <Input value={editDoctor.specialty} onChange={e => setEditDoctor({...editDoctor, specialty: e.target.value})} />
+                </div>
+                <div>
+                  <Label>Telefone</Label>
+                  <Input value={editDoctor.phone} onChange={e => setEditDoctor({...editDoctor, phone: e.target.value})} />
+                </div>
+                <div className="sm:col-span-2">
+                  <Label>Endereço</Label>
+                  <Input value={editDoctor.address} onChange={e => setEditDoctor({...editDoctor, address: e.target.value})} />
+                </div>
+              </div>
               <div className="flex justify-end">
-                <Button onClick={() => setStep(2)} disabled={!selectedPathology}>
-                  Próximo <ArrowRight className="h-4 w-4 ml-1" />
-                </Button>
+                <Button onClick={() => setStep(2)}>Próximo <ArrowRight className="h-4 w-4 ml-1" /></Button>
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* Step 2: Product */}
+        {/* ═══ Step 2: Paciente ═══ */}
         {step === 2 && (
           <Card>
             <CardHeader>
-              <CardTitle>2. Selecionar Produto</CardTitle>
-              <CardDescription>Produtos recomendados para {selectedPathology}</CardDescription>
+              <CardTitle>2. Paciente</CardTitle>
+              <CardDescription>Dados do paciente selecionado</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {recommendedProducts.map((product) => (
-                <div
-                  key={product.name}
-                  className={`p-4 rounded-lg border-2 cursor-pointer transition-colors ${
-                    selectedProduct?.name === product.name ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
-                  }`}
-                  onClick={() => setSelectedProduct(product)}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold">{product.name}</p>
-                      <p className="text-sm text-muted-foreground">{product.type}</p>
-                      <p className="text-sm">{product.description}</p>
-                      <p className="text-xs text-muted-foreground mt-1">Concentração: {product.concentration} mg/mL | Dose sugerida: {product.defaultDosePerKg} mg/kg/dia</p>
-                    </div>
-                    {selectedProduct?.name === product.name && <Check className="h-5 w-5 text-primary" />}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="p-3 rounded-lg bg-muted">
+                  <p className="text-xs text-muted-foreground">Nome</p>
+                  <p className="font-medium">{patient.full_name}</p>
+                </div>
+                <div className="p-3 rounded-lg bg-muted">
+                  <p className="text-xs text-muted-foreground">CPF</p>
+                  <p className="font-medium">{patient.cpf}</p>
+                </div>
+                {patient.rg && (
+                  <div className="p-3 rounded-lg bg-muted">
+                    <p className="text-xs text-muted-foreground">RG</p>
+                    <p className="font-medium">{patient.rg}</p>
                   </div>
+                )}
+                {patient.birth_date && (
+                  <div className="p-3 rounded-lg bg-muted">
+                    <p className="text-xs text-muted-foreground">Data de nascimento</p>
+                    <p className="font-medium">{new Date(patient.birth_date).toLocaleDateString("pt-BR")}</p>
+                  </div>
+                )}
+                <div className="p-3 rounded-lg bg-primary/10">
+                  <p className="text-xs text-muted-foreground">Peso</p>
+                  <p className="text-xl font-bold text-primary">{patient.weight ? `${patient.weight} kg` : "Não informado"}</p>
                 </div>
-              ))}
-              <div className="flex justify-between">
-                <Button variant="outline" onClick={() => setStep(1)}>
-                  <ArrowLeft className="h-4 w-4 mr-1" /> Voltar
-                </Button>
-                <Button onClick={() => setStep(3)} disabled={!selectedProduct}>
-                  Próximo <ArrowRight className="h-4 w-4 ml-1" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Step 3: Dose */}
-        {step === 3 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>3. Cálculo de Dose</CardTitle>
-              <CardDescription>Dose automática baseada no peso do paciente</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 rounded-lg bg-muted">
-                  <p className="text-sm text-muted-foreground">Peso do paciente</p>
-                  <p className="text-2xl font-bold">{patient.weight || "N/I"} kg</p>
-                </div>
-                <div className="p-4 rounded-lg bg-muted">
-                  <p className="text-sm text-muted-foreground">Dose por kg</p>
-                  <p className="text-2xl font-bold">{dosePerKg} mg/kg/dia</p>
-                </div>
-                <div className="p-4 rounded-lg bg-primary/10">
-                  <p className="text-sm text-muted-foreground">Dose diária alvo</p>
-                  <p className="text-2xl font-bold text-primary">{calculatedDose} mg/dia</p>
-                </div>
-                <div className="p-4 rounded-lg bg-primary/10">
-                  <p className="text-sm text-muted-foreground">Volume diário alvo</p>
-                  <p className="text-2xl font-bold text-primary">
-                    {selectedProduct ? calculateVolume(calculatedDose, selectedProduct.concentration) : 0} mL/dia
-                  </p>
-                </div>
-                {selectedProduct && (
-                  <>
-                    <div className="p-4 rounded-lg bg-muted">
-                      <p className="text-sm text-muted-foreground">Frascos/mês (dose inicial)</p>
-                      <p className="text-2xl font-bold">
-                        {Math.ceil((((calculatedDose / 4) / selectedProduct.concentration) * 30) / 30)} frasco(s)
-                      </p>
-                    </div>
-                    <div className="p-4 rounded-lg bg-muted">
-                      <p className="text-sm text-muted-foreground">Frascos/mês (manutenção)</p>
-                      <p className="text-2xl font-bold">
-                        {Math.ceil(((calculatedDose / selectedProduct.concentration) * 30) / 30)} frasco(s)
-                      </p>
-                    </div>
-                  </>
+                {patient.address && (
+                  <div className="p-3 rounded-lg bg-muted">
+                    <p className="text-xs text-muted-foreground">Endereço</p>
+                    <p className="font-medium">{patient.address}</p>
+                  </div>
                 )}
               </div>
               {!patient.weight && (
-                <p className="text-sm text-destructive">⚠ Peso não informado. Cadastre o peso do paciente para cálculo preciso.</p>
+                <p className="text-sm text-destructive flex items-center gap-1"><AlertTriangle className="h-4 w-4" /> Peso não informado. Cadastre o peso do paciente para cálculo preciso de doses.</p>
               )}
               <div className="flex justify-between">
-                <Button variant="outline" onClick={() => setStep(2)}>
-                  <ArrowLeft className="h-4 w-4 mr-1" /> Voltar
-                </Button>
-                <Button onClick={() => setStep(4)} disabled={!patient.weight}>
-                  Próximo <ArrowRight className="h-4 w-4 ml-1" />
-                </Button>
+                <Button variant="outline" onClick={() => setStep(1)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
+                <Button onClick={() => setStep(3)} disabled={!patient.weight}>Próximo <ArrowRight className="h-4 w-4 ml-1" /></Button>
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* Step 4: Titulation */}
+        {/* ═══ Step 3: Patologia ═══ */}
+        {step === 3 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>3. Patologia</CardTitle>
+              <CardDescription>Selecione a condição clínica do paciente</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {PATHOLOGIES.map((p) => {
+                  const range = getDoseRange(p, weight);
+                  const isSelected = selectedPathology?.name === p.name;
+                  return (
+                    <div
+                      key={p.name}
+                      className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                        isSelected ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+                      }`}
+                      onClick={() => setSelectedPathology(p)}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="font-semibold text-sm">{p.name}</p>
+                        {isSelected && <Check className="h-4 w-4 text-primary" />}
+                      </div>
+                      <Badge variant="outline" className="text-xs mb-2">CID-10: {p.cid10}</Badge>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        <Badge variant="secondary" className="text-xs">Início: {range.start} mg</Badge>
+                        <Badge className="text-xs bg-primary/80">Alvo: {range.target} mg</Badge>
+                        <Badge variant="destructive" className="text-xs">Máx: {range.max} mg</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">Rec.: {p.recommendedProduct}</p>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground italic">⚕ Todos os valores são sugestões baseadas na literatura. O médico é soberano na decisão terapêutica.</p>
+              <div className="flex justify-between">
+                <Button variant="outline" onClick={() => setStep(2)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
+                <Button onClick={() => setStep(4)} disabled={!selectedPathology}>Próximo <ArrowRight className="h-4 w-4 ml-1" /></Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ═══ Step 4: Produto ═══ */}
         {step === 4 && (
           <Card>
             <CardHeader>
-              <CardTitle>4. Protocolo de Titulação</CardTitle>
-              <CardDescription>Administração 12/12h, dobrando a dose a cada 5–7 dias</CardDescription>
+              <CardTitle>4. Produto</CardTitle>
+              <CardDescription>Selecione o produto a ser prescrito</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Semana</TableHead>
-                    <TableHead>Período</TableHead>
-                    <TableHead>Manhã (mg)</TableHead>
-                    <TableHead>Noite (mg)</TableHead>
-                    <TableHead>Total/dia</TableHead>
-                    <TableHead>Vol. manhã (mL)</TableHead>
-                    <TableHead>Vol. noite (mL)</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {titulationSteps.map((s) => (
-                    <TableRow key={s.week}>
-                      <TableCell className="font-medium">{s.week}</TableCell>
-                      <TableCell>{s.days}</TableCell>
-                      <TableCell>{s.doseMorning}</TableCell>
-                      <TableCell>{s.doseEvening}</TableCell>
-                      <TableCell className="font-semibold">{s.totalDaily}</TableCell>
-                      <TableCell>{s.volumeMorning}</TableCell>
-                      <TableCell>{s.volumeEvening}</TableCell>
+              {PRODUCTS.map((product) => {
+                const isRecommended = selectedPathology?.recommendedProduct === product.name;
+                const isSelected = selectedProduct?.name === product.name;
+                return (
+                  <div
+                    key={product.name}
+                    className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                      isSelected ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+                    }`}
+                    onClick={() => setSelectedProduct(product)}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <p className="font-bold text-lg">{product.name}</p>
+                        <Badge variant="outline">{product.typeLabel}</Badge>
+                        {isRecommended && <Badge className="bg-primary text-primary-foreground">✓ Indicado para este caso</Badge>}
+                      </div>
+                      {isSelected && <Check className="h-5 w-5 text-primary" />}
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-2">{product.description}</p>
+                    {isSelected && (
+                      <div className="mt-3 space-y-3">
+                        <div className="p-3 rounded bg-muted text-sm">
+                          <p className="font-medium mb-1">Justificativa clínica:</p>
+                          <p>{product.clinicalJustification}</p>
+                        </div>
+                        <div className="p-3 rounded bg-muted text-sm">
+                          <p className="font-medium mb-1">Justificativa canabínica:</p>
+                          <p>{product.cannabinoidJustification}</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Badge variant="secondary">mg/gota: {((product.mgMl * product.cbdPct) / product.dropsPerMl).toFixed(2)}</Badge>
+                          {doseRange && (
+                            <>
+                              <Badge variant="secondary">Alvo: {mgDayToDropsDay(doseRange.target, product)} gotas/dia</Badge>
+                              <Badge variant="secondary">Máx: {mgDayToDropsDay(doseRange.max, product)} gotas/dia</Badge>
+                            </>
+                          )}
+                        </div>
+                        {/* Composition table */}
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Canabinoide</TableHead>
+                              <TableHead>%</TableHead>
+                              <TableHead>mg/30mL</TableHead>
+                              <TableHead>mg/mL</TableHead>
+                              <TableHead>mg/gota</TableHead>
+                              <TableHead>Efeito</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {product.cannabinoids.map((c) => (
+                              <TableRow key={c.name}>
+                                <TableCell className="font-medium">{c.name}</TableCell>
+                                <TableCell>{c.pct.toFixed(1)}%</TableCell>
+                                <TableCell>{c.mg30ml}</TableCell>
+                                <TableCell>{c.mgMl}</TableCell>
+                                <TableCell>{c.mgDrop}</TableCell>
+                                <TableCell className="text-xs">{c.effect}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              <p className="text-xs text-muted-foreground italic">⚕ O médico pode escolher qualquer produto — a recomendação é uma sugestão baseada na literatura.</p>
+              <div className="flex justify-between">
+                <Button variant="outline" onClick={() => setStep(3)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
+                <Button onClick={() => setStep(5)} disabled={!selectedProduct}>Próximo <ArrowRight className="h-4 w-4 ml-1" /></Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ═══ Step 5: Posologia ═══ */}
+        {step === 5 && selectedProduct && doseRange && (
+          <Card>
+            <CardHeader>
+              <CardTitle>5. Posologia</CardTitle>
+              <CardDescription>Configure o protocolo de titulação</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Selectors */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <Label>Intervalo de titulação</Label>
+                  <Select value={String(intervalDays)} onValueChange={v => setIntervalDays(Number(v))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5 dias</SelectItem>
+                      <SelectItem value="7">7 dias</SelectItem>
+                      <SelectItem value="14">14 dias</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Via de administração</Label>
+                  <Select value={via} onValueChange={setVia}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sublingual">Sublingual</SelectItem>
+                      <SelectItem value="oral">Oral</SelectItem>
+                      <SelectItem value="azeite">Com azeite/alimento</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Dose inicial (gotas/tomada)</Label>
+                  <Select value={String(initialDrops)} onValueChange={v => setInitialDrops(Number(v))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {[2, 3, 4, 5].map(d => <SelectItem key={d} value={String(d)}>{d} gotas</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Titulation table */}
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Sem.</TableHead>
+                      <TableHead>Gotas/dose</TableHead>
+                      <TableHead>Freq.</TableHead>
+                      <TableHead>mg can./dose</TableHead>
+                      <TableHead>mg CBD/dose</TableHead>
+                      <TableHead>mg CBD/dia</TableHead>
+                      <TableHead>mg/kg/dia</TableHead>
+                      <TableHead>Gotas/dia</TableHead>
+                      <TableHead>Status</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {titulationSteps.map((s) => (
+                      <TableRow key={s.week} className={
+                        s.status === "target" ? "bg-primary/10" : s.status === "above_max" ? "bg-destructive/10" : ""
+                      }>
+                        <TableCell className="font-medium">{s.week}</TableCell>
+                        <TableCell>{s.dropsPerDose}</TableCell>
+                        <TableCell>{s.frequency}</TableCell>
+                        <TableCell>{s.mgCanPerDose}</TableCell>
+                        <TableCell>{s.mgCbdPerDose}</TableCell>
+                        <TableCell className="font-semibold">{s.mgCbdPerDay}</TableCell>
+                        <TableCell>{s.mgKgPerDay}</TableCell>
+                        <TableCell>{s.dropsPerDay}</TableCell>
+                        <TableCell>
+                          {s.status === "target" && <Badge className="bg-primary">Dose alvo</Badge>}
+                          {s.status === "above_max" && <Badge variant="destructive">Acima do máx.</Badge>}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Equilibrium box */}
+              {titulationSteps.find(s => s.status === "target") && (
+                <div className="p-4 rounded-lg bg-primary/10 border border-primary/30">
+                  <p className="font-semibold text-primary">Dose de equilíbrio estimada</p>
+                  <p className="text-sm">
+                    {titulationSteps.find(s => s.status === "target")!.dropsPerDose} gotas/dose (12/12h) = {titulationSteps.find(s => s.status === "target")!.dropsPerDay} gotas/dia = {titulationSteps.find(s => s.status === "target")!.mgCbdPerDay} mg CBD/dia
+                  </p>
+                </div>
+              )}
+
+              {/* Bottle calculation */}
+              <div className="p-4 rounded-lg bg-muted space-y-3">
+                <p className="font-semibold">Cálculo de frascos</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <Label>Duração</Label>
+                    <Select value={String(durationMonths)} onValueChange={v => setDurationMonths(Number(v))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {[1, 2, 3, 6].map(m => <SelectItem key={m} value={String(m)}>{m} mês(es)</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Base do cálculo</Label>
+                    <Select value={bottleBasis} onValueChange={v => setBottleBasis(v as any)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="initial">Dose inicial</SelectItem>
+                        <SelectItem value="target">Dose alvo</SelectItem>
+                        <SelectItem value="max">Dose máxima</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Frascos</Label>
+                    <Input type="number" min={1} value={editableBottles} onChange={e => setEditableBottles(Number(e.target.value))} />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">600 gotas/frasco ÷ gotas/dia × dias = frascos necessários. Todos os campos são editáveis.</p>
+              </div>
+
+              <div className="p-3 rounded bg-muted/50 text-xs text-muted-foreground">
+                <p className="font-medium">⚠ Nota clínica:</p>
+                <p>Canabinoides são metabolizados via CYP3A4 e CYP2C19. Verificar possíveis interações medicamentosas, especialmente com anticoagulantes, antiepilépticos e benzodiazepínicos.</p>
+              </div>
+
+              <p className="text-xs text-muted-foreground italic">⚕ Todos os campos são editáveis — o médico é soberano na decisão terapêutica.</p>
+
               <div className="flex justify-between">
-                <Button variant="outline" onClick={() => setStep(3)}>
-                  <ArrowLeft className="h-4 w-4 mr-1" /> Voltar
-                </Button>
-                <Button onClick={() => setStep(5)}>
-                  Próximo <ArrowRight className="h-4 w-4 ml-1" />
-                </Button>
+                <Button variant="outline" onClick={() => setStep(4)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
+                <Button onClick={() => setStep(6)}>Próximo <ArrowRight className="h-4 w-4 ml-1" /></Button>
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* Step 5: TCLE */}
-        {step === 5 && (
+        {/* ═══ Step 6: Documentos ═══ */}
+        {step === 6 && selectedProduct && selectedPathology && (
           <Card>
             <CardHeader>
-              <CardTitle>5. Termo de Consentimento (TCLE)</CardTitle>
-              <CardDescription>O paciente deve concordar com o tratamento</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="p-4 rounded-lg bg-muted text-sm space-y-2 max-h-64 overflow-y-auto">
-                <p className="font-semibold">TERMO DE CONSENTIMENTO LIVRE E ESCLARECIDO</p>
-                <p>Eu, <strong>{patient.full_name}</strong>, CPF <strong>{patient.cpf}</strong>, declaro que fui devidamente informado(a) pelo(a) Dr(a). <strong>{doctor?.full_name}</strong> (CRM <strong>{doctor?.crm}</strong>) sobre:</p>
-                <ul className="list-disc pl-5 space-y-1">
-                  <li>A natureza do tratamento com produtos à base de Cannabis medicinal;</li>
-                  <li>Os benefícios esperados e os possíveis efeitos adversos;</li>
-                  <li>O produto prescrito: <strong>{selectedProduct?.name} ({selectedProduct?.type})</strong>;</li>
-                  <li>A posologia e o protocolo de titulação gradual;</li>
-                  <li>A necessidade de acompanhamento médico regular;</li>
-                  <li>Que o tratamento pode ser suspenso a qualquer momento;</li>
-                  <li>Que devo comunicar qualquer efeito adverso imediatamente ao médico.</li>
-                </ul>
-                <p>Declaro estar ciente e de acordo com o tratamento proposto.</p>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="tcle"
-                  checked={tcleAccepted}
-                  onCheckedChange={(checked) => setTcleAccepted(checked === true)}
-                />
-                <Label htmlFor="tcle">Paciente leu e concordou com o TCLE</Label>
-              </div>
-              <div className="flex justify-between">
-                <Button variant="outline" onClick={() => setStep(4)}>
-                  <ArrowLeft className="h-4 w-4 mr-1" /> Voltar
-                </Button>
-                <Button onClick={() => setStep(6)} disabled={!tcleAccepted}>
-                  Próximo <ArrowRight className="h-4 w-4 ml-1" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Step 6: Review & Generate */}
-        {step === 6 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>6. Revisão e Geração da Receita</CardTitle>
-              <CardDescription>Confira os dados antes de gerar o PDF</CardDescription>
+              <CardTitle>6. Documentos</CardTitle>
+              <CardDescription>Revise os dados e gere os PDFs. Todos os campos são editáveis.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4">
                 <div className="p-3 rounded-lg bg-muted">
-                  <p className="text-xs text-muted-foreground">Paciente</p>
-                  <p className="font-medium">{patient.full_name} — CPF: {patient.cpf}</p>
+                  <p className="text-xs text-muted-foreground">Médico</p>
+                  <p className="font-medium">Dr(a). {editDoctor.full_name} — CRM {editDoctor.crm} — {editDoctor.specialty}</p>
                 </div>
                 <div className="p-3 rounded-lg bg-muted">
-                  <p className="text-xs text-muted-foreground">Patologia</p>
-                  <p className="font-medium">{selectedPathology}</p>
+                  <p className="text-xs text-muted-foreground">Paciente</p>
+                  <p className="font-medium">{patient.full_name} — CPF: {patient.cpf} — Peso: {patient.weight} kg</p>
+                </div>
+                <div>
+                  <Label>Diagnóstico + CID-10</Label>
+                  <Input value={editDiagnosis} onChange={e => setEditDiagnosis(e.target.value)} />
                 </div>
                 <div className="p-3 rounded-lg bg-muted">
                   <p className="text-xs text-muted-foreground">Produto</p>
-                  <p className="font-medium">{selectedProduct?.name} — {selectedProduct?.type}</p>
+                  <p className="font-medium">{selectedProduct.name} — {selectedProduct.typeLabel}</p>
                 </div>
                 <div className="p-3 rounded-lg bg-muted">
-                  <p className="text-xs text-muted-foreground">Posologia</p>
-                  <p className="font-medium">{calculatedDose} mg/dia ({dosePerKg} mg/kg) — {selectedProduct ? calculateVolume(calculatedDose, selectedProduct.concentration) : 0} mL/dia</p>
+                  <p className="text-xs text-muted-foreground">Posologia resumida</p>
+                  <p className="font-medium">
+                    Via {via} · Dose inicial: {initialDrops} gotas (12/12h) · Titulação a cada {intervalDays} dias ·
+                    Dose alvo: {doseRange?.target} mg/dia · Dose máxima: {doseRange?.max} mg/dia ·
+                    mg/gota: {((selectedProduct.mgMl * selectedProduct.cbdPct) / selectedProduct.dropsPerMl).toFixed(2)}
+                  </p>
                 </div>
-                <div className="p-3 rounded-lg bg-muted">
-                  <p className="text-xs text-muted-foreground">TCLE</p>
-                  <p className="font-medium text-primary">✓ Aceito</p>
+                <div>
+                  <Label>Quantidade</Label>
+                  <Input value={editQuantity} onChange={e => setEditQuantity(e.target.value)} />
                 </div>
               </div>
-              <div className="flex justify-between">
-                <Button variant="outline" onClick={() => setStep(5)}>
-                  <ArrowLeft className="h-4 w-4 mr-1" /> Voltar
-                </Button>
-                <Button onClick={handleSaveAndDownload} disabled={saving}>
-                  <Download className="h-4 w-4 mr-1" />
-                  {saving ? "Gerando..." : "Salvar e Baixar PDF"}
-                </Button>
+
+              <div className="border-t pt-4 space-y-3">
+                <p className="font-semibold">Gerar documentos:</p>
+                <div className="flex flex-wrap gap-3">
+                  <Button onClick={() => handleSaveAndDownload("receita")} disabled={saving} variant="outline">
+                    <Download className="h-4 w-4 mr-1" /> {saving ? "Gerando..." : "Receita Médica (PDF)"}
+                  </Button>
+                  <Button onClick={() => handleSaveAndDownload("guia")} disabled={saving} variant="outline">
+                    <Download className="h-4 w-4 mr-1" /> {saving ? "Gerando..." : "Guia do Paciente (PDF)"}
+                  </Button>
+                  <Button onClick={() => handleSaveAndDownload("ambos")} disabled={saving}>
+                    <Download className="h-4 w-4 mr-1" /> {saving ? "Gerando..." : "Gerar Ambos"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex justify-start">
+                <Button variant="outline" onClick={() => setStep(5)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
               </div>
             </CardContent>
           </Card>
