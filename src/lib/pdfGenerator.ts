@@ -124,9 +124,6 @@ export function generatePrescriptionPDF({ doctor, patient, prescriptionData: pd 
     `Via: ${pd.via}`,
     `Dose inicial: ${pd.initialDrops} gotas por tomada, de 12/12 horas`,
     `Titulação: dobrar a dose a cada ${pd.intervalDays} dias até melhora clínica`,
-    `Dose alvo: ${pd.doseTarget} mg/dia`,
-    `Dose máxima: ${pd.doseMax} mg/dia`,
-    `mg/gota: ${pd.mgPerDrop}`,
   ];
   posLines.forEach(l => { doc.text(l, 24, y); y += 5; });
   y += 3;
