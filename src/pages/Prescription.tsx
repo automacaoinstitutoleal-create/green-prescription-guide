@@ -255,6 +255,22 @@ export default function Prescription() {
                     {selectedProduct ? calculateVolume(calculatedDose, selectedProduct.concentration) : 0} mL/dia
                   </p>
                 </div>
+                {selectedProduct && (
+                  <>
+                    <div className="p-4 rounded-lg bg-muted">
+                      <p className="text-sm text-muted-foreground">Frascos/mês (dose inicial)</p>
+                      <p className="text-2xl font-bold">
+                        {Math.ceil((((calculatedDose / 4) / selectedProduct.concentration) * 30) / 30)} frasco(s)
+                      </p>
+                    </div>
+                    <div className="p-4 rounded-lg bg-muted">
+                      <p className="text-sm text-muted-foreground">Frascos/mês (manutenção)</p>
+                      <p className="text-2xl font-bold">
+                        {Math.ceil(((calculatedDose / selectedProduct.concentration) * 30) / 30)} frasco(s)
+                      </p>
+                    </div>
+                  </>
+                )}
               </div>
               {!patient.weight && (
                 <p className="text-sm text-destructive">⚠ Peso não informado. Cadastre o peso do paciente para cálculo preciso.</p>
