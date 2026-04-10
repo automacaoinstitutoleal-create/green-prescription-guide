@@ -10,21 +10,28 @@ export interface PathologyInfo {
   recommendedProduct: string;
 }
 
-export const PATHOLOGIES: PathologyInfo[] = [
-  { name: "Dor crônica", cid10: "R52", doseType: "fixo", doseStart: 20, doseTarget: 80, doseMax: 300, recommendedProduct: "RELIEF" },
+const PATHOLOGIES_UNSORTED: PathologyInfo[] = [
   { name: "Ansiedade / TEPT", cid10: "F41.1", doseType: "fixo", doseStart: 25, doseTarget: 150, doseMax: 600, recommendedProduct: "HARMONY" },
-  { name: "Epilepsia", cid10: "G40.9", doseType: "mg_kg", doseStart: 2.5, doseTarget: 10, doseMax: 20, recommendedProduct: "HARMONY" },
-  { name: "Câncer / Paliativos", cid10: "Z51.5", doseType: "fixo", doseStart: 25, doseTarget: 150, doseMax: 300, recommendedProduct: "RELIEF" },
-  { name: "Insônia", cid10: "G47.0", doseType: "fixo", doseStart: 25, doseTarget: 150, doseMax: 300, recommendedProduct: "BALANCE" },
-  { name: "Fibromialgia", cid10: "M79.7", doseType: "fixo", doseStart: 20, doseTarget: 80, doseMax: 200, recommendedProduct: "RELIEF" },
-  { name: "Parkinson / Alzheimer", cid10: "G20", doseType: "fixo", doseStart: 25, doseTarget: 150, doseMax: 300, recommendedProduct: "HARMONY" },
-  { name: "Doenças autoimunes", cid10: "M35.9", doseType: "fixo", doseStart: 20, doseTarget: 100, doseMax: 300, recommendedProduct: "BALANCE" },
-  { name: "Depressão", cid10: "F32.9", doseType: "fixo", doseStart: 25, doseTarget: 150, doseMax: 300, recommendedProduct: "HARMONY" },
   { name: "Autismo (TEA)", cid10: "F84.0", doseType: "mg_kg", doseStart: 1, doseTarget: 5, doseMax: 10, recommendedProduct: "HARMONY" },
-  { name: "TOC / Espectro psicótico", cid10: "F42", doseType: "fixo", doseStart: 50, doseTarget: 200, doseMax: 600, recommendedProduct: "HARMONY" },
+  { name: "Doença de Alzheimer", cid10: "G30", doseType: "fixo", doseStart: 25, doseTarget: 150, doseMax: 300, recommendedProduct: "HARMONY" },
+  { name: "Doença de Parkinson", cid10: "G20", doseType: "fixo", doseStart: 25, doseTarget: 150, doseMax: 300, recommendedProduct: "HARMONY" },
+  { name: "Dor crônica", cid10: "R52", doseType: "fixo", doseStart: 20, doseTarget: 80, doseMax: 300, recommendedProduct: "RELIEF" },
+  { name: "Enxaqueca crônica", cid10: "G43", doseType: "fixo", doseStart: 20, doseTarget: 100, doseMax: 200, recommendedProduct: "RELIEF" },
+  { name: "Epilepsia", cid10: "G40.9", doseType: "mg_kg", doseStart: 2.5, doseTarget: 10, doseMax: 20, recommendedProduct: "HARMONY" },
   { name: "Esclerose múltipla", cid10: "G35", doseType: "fixo", doseStart: 20, doseTarget: 100, doseMax: 300, recommendedProduct: "RELIEF" },
-  { name: "Inflamação cutânea", cid10: "L70.0", doseType: "fixo", doseStart: 10, doseTarget: 25, doseMax: 75, recommendedProduct: "HARMONY" },
+  { name: "Fibromialgia", cid10: "M79.7", doseType: "fixo", doseStart: 20, doseTarget: 80, doseMax: 200, recommendedProduct: "RELIEF" },
+  { name: "Insônia", cid10: "G47.0", doseType: "fixo", doseStart: 25, doseTarget: 150, doseMax: 300, recommendedProduct: "BALANCE" },
+  { name: "TDAH", cid10: "F90.0", doseType: "fixo", doseStart: 25, doseTarget: 100, doseMax: 200, recommendedProduct: "HARMONY" },
+  { name: "TOC (Transtorno Obsessivo Compulsivo)", cid10: "F42", doseType: "fixo", doseStart: 50, doseTarget: 200, doseMax: 600, recommendedProduct: "HARMONY" },
+  { name: "Transtorno bipolar", cid10: "F31", doseType: "fixo", doseStart: 25, doseTarget: 150, doseMax: 300, recommendedProduct: "HARMONY" },
+  { name: "Transtorno do pânico", cid10: "F41.0", doseType: "fixo", doseStart: 25, doseTarget: 150, doseMax: 300, recommendedProduct: "HARMONY" },
+  { name: "Transtornos psicóticos", cid10: "F29", doseType: "fixo", doseStart: 50, doseTarget: 200, doseMax: 600, recommendedProduct: "HARMONY" },
 ];
+
+// Ordenação alfabética automática (ignora acentos)
+export const PATHOLOGIES: PathologyInfo[] = PATHOLOGIES_UNSORTED.sort((a, b) =>
+  a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" })
+);
 
 // ── Products with full cannabinoid composition ──
 

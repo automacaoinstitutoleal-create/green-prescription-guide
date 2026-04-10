@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, Check, Download, AlertTriangle } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Download, AlertTriangle, Search } from "lucide-react";
 import {
   PATHOLOGIES, PRODUCTS,
   getDoseRange, mgDayToDropsDay, dropsToBottlesPerMonth, calcBottles,
@@ -54,6 +54,14 @@ export default function Prescription() {
 
   // Step 3 - Pathology
   const [selectedPathology, setSelectedPathology] = useState<PathologyInfo | null>(null);
+  const [pathologySearch, setPathologySearch] = useState("");
+  const filteredPathologies = useMemo(() => {
+    if (!pathologySearch.trim()) return PATHOLOGIES;
+    const term = pathologySearch.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return PATHOLOGIES.filter((p) =>
+      p.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(term)
+    );
+  }, [pathologySearch]);
 
   // Step 4 - Product
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -315,8 +323,17 @@ export default function Prescription() {
               <CardDescription>Selecione a condição clínica do paciente</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar condição..."
+                  value={pathologySearch}
+                  onChange={(e) => setPathologySearch(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {PATHOLOGIES.map((p) => {
+                {filteredPathologies.map((p) => {
                   const range = getDoseRange(p, weight);
                   const isSelected = selectedPathology?.name === p.name;
                   return (
