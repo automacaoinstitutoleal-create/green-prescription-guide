@@ -122,9 +122,13 @@ export default function Prescription() {
       return;
     }
 
-    // Generate PDF
-    generatePrescriptionPDF({ doctor, patient, prescriptionData, tcleAccepted });
-    toast.success("Receita salva e PDF gerado!");
+    try {
+      generatePrescriptionPDF({ doctor, patient, prescriptionData, tcleAccepted });
+      toast.success("Receita salva e PDF gerado!");
+    } catch (e) {
+      console.error("Erro ao gerar PDF:", e);
+      toast.error("Receita salva, mas houve erro ao gerar o PDF.");
+    }
     setSaving(false);
     navigate(`/pacientes/${patient.id}/historico`);
   };
