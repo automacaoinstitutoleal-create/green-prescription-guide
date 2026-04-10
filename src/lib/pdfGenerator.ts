@@ -113,7 +113,7 @@ export function generatePrescriptionPDF({ doctor, patient, prescriptionData: pd 
   doc.setFont("helvetica", "bold");
   doc.text("PRODUTO PRESCRITO", 20, y); y += 6;
   doc.setFont("helvetica", "normal");
-  doc.text(`Canabidiol Greenlion ${pd.product} ${pd.totalMg}mg`, 20, y); y += 8;
+  doc.text(`Canabidiol Greenlion ${pd.product} 7237mg`, 20, y); y += 8;
 
   // Posologia
   doc.setFont("helvetica", "bold");
