@@ -96,7 +96,7 @@ export function generatePrescriptionPDF({ doctor, patient, prescriptionData, tcl
   doc.setFont("helvetica", "bold");
   doc.text("PROTOCOLO DE TITULAÇÃO", 20, y); y += 4;
 
-  (doc as any).autoTable({
+  autoTable(doc, {
     startY: y,
     head: [["Semana", "Período", "Manhã (mg)", "Noite (mg)", "Total/dia (mg)", "Vol. manhã (mL)", "Vol. noite (mL)"]],
     body: prescriptionData.titulationSteps.map((s) => [
