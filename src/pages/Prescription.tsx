@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -14,9 +13,9 @@ import { toast } from "sonner";
 import { ArrowLeft, ArrowRight, Check, Download, AlertTriangle, Search } from "lucide-react";
 import {
   PATHOLOGIES, PRODUCTS,
-  getDoseRange, mgDayToDropsDay, dropsToBottlesPerMonth, calcBottles,
-  generateTitulationProtocol,
-  type PathologyInfo, type Product, type TitulationStep,
+  getDoseRange, mgDayToDropsDay,
+  generateTitulationProtocol, calcBottlesFromSchedule,
+  type PathologyInfo, type Product, type TitulationStep, type TitulationConfig,
 } from "@/lib/prescriptionData";
 import { generatePrescriptionPDF, generatePatientGuidePDF } from "@/lib/pdfGenerator";
 
@@ -66,18 +65,30 @@ export default function Prescription() {
   // Step 4 - Product
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
-  // Step 5 - Posology
-  const [intervalDays, setIntervalDays] = useState(7);
-  const [via, setVia] = useState("sublingual");
+  // Step 5 - Posology (new fields)
   const [initialDrops, setInitialDrops] = useState(2);
-  const [titulationSteps, setTitulationSteps] = useState<TitulationStep[]>([]);
-  const [durationMonths, setDurationMonths] = useState(1);
-  const [bottleBasis, setBottleBasis] = useState<"target" | "max" | "initial">("target");
+  const [increment, setIncrement] = useState(2);
+  const [intervalDays, setIntervalDays] = useState(7);
+  const [maintenanceDrops, setMaintenanceDrops] = useState(10);
+  const [via, setVia] = useState("sublingual");
+  const [time1, setTime1] = useState("08:00");
+  const [time2, setTime2] = useState("20:00");
+  const [returnDate, setReturnDate] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() + 30);
+    return d.toISOString().slice(0, 10);
+  });
   const [editableBottles, setEditableBottles] = useState(1);
+  const [titulationSteps, setTitulationSteps] = useState<TitulationStep[]>([]);
+  const [bottleBreakdown, setBottleBreakdown] = useState<{ week: number; drops: number; dropsPerDose: number; days: number }[]>([]);
+  const [totalDrops30, setTotalDrops30] = useState(0);
 
   // Step 6 - Editable fields for documents
   const [editDiagnosis, setEditDiagnosis] = useState("");
   const [editQuantity, setEditQuantity] = useState("");
+
+  const titConfig: TitulationConfig = useMemo(() => ({
+    initialDrops, increment, intervalDays, maintenanceDrops, via, time1, time2, returnDate,
+  }), [initialDrops, increment, intervalDays, maintenanceDrops, via, time1, time2, returnDate]);
 
   useEffect(() => {
     if (!user || !patientId) return;
@@ -102,21 +113,15 @@ export default function Prescription() {
 
   // Recalculate titulation when relevant deps change
   useEffect(() => {
-    if (!selectedProduct || !selectedPathology || !patient?.weight) return;
-    const range = getDoseRange(selectedPathology, patient.weight);
-    const steps = generateTitulationProtocol(
-      initialDrops, selectedProduct, patient.weight, range.target, range.max, intervalDays
-    );
+    if (!selectedProduct || !patient?.weight) return;
+    const steps = generateTitulationProtocol(titConfig, selectedProduct, patient.weight);
     setTitulationSteps(steps);
 
-    // Calculate bottles
-    const targetStep = steps.find(s => s.status === "target");
-    const basisDrops = bottleBasis === "initial" ? initialDrops * 2
-      : bottleBasis === "max" ? (steps[steps.length - 1]?.dropsPerDay ?? initialDrops * 2)
-      : (targetStep?.dropsPerDay ?? initialDrops * 2);
-    const bottles = calcBottles(basisDrops, selectedProduct, durationMonths);
-    setEditableBottles(bottles);
-  }, [selectedProduct, selectedPathology, patient?.weight, initialDrops, intervalDays, durationMonths, bottleBasis]);
+    const calc = calcBottlesFromSchedule(titConfig, selectedProduct);
+    setBottleBreakdown(calc.weeklyBreakdown);
+    setTotalDrops30(calc.totalDrops);
+    setEditableBottles(calc.bottles);
+  }, [selectedProduct, patient?.weight, titConfig]);
 
   // Set edit fields when pathology changes
   useEffect(() => {
@@ -127,34 +132,32 @@ export default function Prescription() {
   }, [selectedPathology]);
 
   useEffect(() => {
-    if (selectedProduct && selectedPathology && patient?.weight) {
-      const range = getDoseRange(selectedPathology, patient.weight);
-      const targetDrops = mgDayToDropsDay(range.target, selectedProduct);
-      setEditQuantity(`${editableBottles} frasco(s) de 30 mL — ${durationMonths} mês(es)`);
+    if (selectedProduct) {
+      setEditQuantity(`${editableBottles} frasco(s) de 30 mL — 30 dias até retorno médico`);
     }
-  }, [editableBottles, durationMonths]);
+  }, [editableBottles, selectedProduct]);
 
   const handleSaveAndDownload = async (docType: "receita" | "guia" | "ambos") => {
     if (!user || !patient || !doctor || !selectedProduct || !selectedPathology) return;
     setSaving(true);
 
-    const range = getDoseRange(selectedPathology, patient.weight || 0);
+    const mgPerDrop = +(selectedProduct.mgMl / selectedProduct.dropsPerMl).toFixed(2);
+    const mgCbdPerDrop = +((selectedProduct.mgMl * selectedProduct.cbdPct) / selectedProduct.dropsPerMl).toFixed(2);
+
     const prescriptionData = {
       pathology: selectedPathology.name,
       cid10: selectedPathology.cid10,
       product: selectedProduct.name,
       productType: selectedProduct.typeLabel,
-      doseStart: range.start,
-      doseTarget: range.target,
-      doseMax: range.max,
       titulationSteps,
       patientWeight: patient.weight,
-      intervalDays,
-      via,
-      initialDrops,
-      durationMonths,
       bottles: editableBottles,
-      mgPerDrop: +((selectedProduct.mgMl * selectedProduct.cbdPct) / selectedProduct.dropsPerMl).toFixed(2),
+      mgPerDrop,
+      mgCbdPerDrop,
+      config: titConfig,
+      productFullLabel: selectedProduct.fullLabel,
+      productComposition: selectedProduct.compositionLabel,
+      receituarioType: selectedProduct.receituarioType,
     };
 
     const insertData = {
@@ -163,7 +166,7 @@ export default function Prescription() {
       pathology: selectedPathology.name,
       product: selectedProduct.name,
       dose_per_kg: selectedPathology.doseType === "mg_kg" ? selectedPathology.doseTarget : null,
-      calculated_dose: range.target,
+      calculated_dose: maintenanceDrops * 2 * mgCbdPerDrop,
       titulation_protocol: JSON.parse(JSON.stringify(titulationSteps)),
       tcle_accepted: docType === "guia" || docType === "ambos",
       prescription_data: JSON.parse(JSON.stringify(prescriptionData)),
@@ -225,7 +228,8 @@ export default function Prescription() {
             <div key={s} className={`h-2 flex-1 rounded-full ${s <= step ? "bg-primary" : "bg-border"}`} />
           ))}
         </div>
-        <p className="text-sm text-muted-foreground mb-4">Etapa {step} de 6</p>
+        <p className="text-sm text-muted-foreground mb-2">Etapa {step} de 6</p>
+        <p className="text-xs text-muted-foreground italic mb-4">⚕ Todas as sugestões são baseadas em literatura clínica. O médico tem autonomia total para ajustar qualquer valor.</p>
 
         {/* ═══ Step 1: Médico ═══ */}
         {step === 1 && (
@@ -455,17 +459,39 @@ export default function Prescription() {
         )}
 
         {/* ═══ Step 5: Posologia ═══ */}
-        {step === 5 && selectedProduct && doseRange && (
+        {step === 5 && selectedProduct && (
           <Card>
             <CardHeader>
               <CardTitle>5. Posologia</CardTitle>
-              <CardDescription>Configure o protocolo de titulação</CardDescription>
+              <CardDescription>Defina os valores exatos do protocolo de titulação — "start low, go slow"</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Selectors */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Selectors row 1 */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
-                  <Label>Intervalo de titulação</Label>
+                  <Label>Dose inicial (gotas/tomada)</Label>
+                  <Select value={String(initialDrops)} onValueChange={v => setInitialDrops(Number(v))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 10 }, (_, i) => i + 1).map(d => (
+                        <SelectItem key={d} value={String(d)}>{d} gota{d > 1 ? "s" : ""}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Incremento (gotas/dose)</Label>
+                  <Select value={String(increment)} onValueChange={v => setIncrement(Number(v))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">+1 gota</SelectItem>
+                      <SelectItem value="2">+2 gotas</SelectItem>
+                      <SelectItem value="3">+3 gotas</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Intervalo de ajuste</Label>
                   <Select value={String(intervalDays)} onValueChange={v => setIntervalDays(Number(v))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -476,106 +502,126 @@ export default function Prescription() {
                   </Select>
                 </div>
                 <div>
+                  <Label>Dose de manutenção (gotas/tomada)</Label>
+                  <Input type="number" min={1} max={50} value={maintenanceDrops} onChange={e => setMaintenanceDrops(Number(e.target.value) || 1)} />
+                </div>
+              </div>
+
+              {/* Selectors row 2 */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
                   <Label>Via de administração</Label>
                   <Select value={via} onValueChange={setVia}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="sublingual">Sublingual</SelectItem>
-                      <SelectItem value="oral">Oral</SelectItem>
-                      <SelectItem value="azeite">Com azeite/alimento</SelectItem>
+                      <SelectItem value="sublingual">Sublingual 60–90s</SelectItem>
+                      <SelectItem value="oral">Oral com alimento</SelectItem>
+                      <SelectItem value="azeite">Com azeite/gordura</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <Label>Dose inicial (gotas/tomada)</Label>
-                  <Select value={String(initialDrops)} onValueChange={v => setInitialDrops(Number(v))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {[2, 3, 4, 5].map(d => <SelectItem key={d} value={String(d)}>{d} gotas</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <Label>Horário 1 (manhã)</Label>
+                  <Input type="time" value={time1} onChange={e => setTime1(e.target.value)} />
+                </div>
+                <div>
+                  <Label>Horário 2 (noite)</Label>
+                  <Input type="time" value={time2} onChange={e => setTime2(e.target.value)} />
+                </div>
+                <div>
+                  <Label>Data de retorno</Label>
+                  <Input type="date" value={returnDate} onChange={e => setReturnDate(e.target.value)} />
                 </div>
               </div>
 
               {/* Titulation table */}
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Sem.</TableHead>
-                      <TableHead>Gotas/dose</TableHead>
-                      <TableHead>Freq.</TableHead>
-                      <TableHead>mg can./dose</TableHead>
-                      <TableHead>mg CBD/dose</TableHead>
-                      <TableHead>mg CBD/dia</TableHead>
-                      <TableHead>mg/kg/dia</TableHead>
-                      <TableHead>Gotas/dia</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {titulationSteps.map((s) => (
-                      <TableRow key={s.week} className={
-                        s.status === "target" ? "bg-primary/10" : s.status === "above_max" ? "bg-destructive/10" : ""
-                      }>
-                        <TableCell className="font-medium">{s.week}</TableCell>
-                        <TableCell>{s.dropsPerDose}</TableCell>
-                        <TableCell>{s.frequency}</TableCell>
-                        <TableCell>{s.mgCanPerDose}</TableCell>
-                        <TableCell>{s.mgCbdPerDose}</TableCell>
-                        <TableCell className="font-semibold">{s.mgCbdPerDay}</TableCell>
-                        <TableCell>{s.mgKgPerDay}</TableCell>
-                        <TableCell>{s.dropsPerDay}</TableCell>
-                        <TableCell>
-                          {s.status === "target" && <Badge className="bg-primary">Dose alvo</Badge>}
-                          {s.status === "above_max" && <Badge variant="destructive">Acima do máx.</Badge>}
-                        </TableCell>
+              <div>
+                <h3 className="font-semibold mb-2">Cronograma de Titulação</h3>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Sem.</TableHead>
+                        <TableHead>Período</TableHead>
+                        <TableHead>Gotas/dose</TableHead>
+                        <TableHead>Freq.</TableHead>
+                        <TableHead>mg can./dose</TableHead>
+                        <TableHead>mg CBD/dose</TableHead>
+                        <TableHead>mg CBD/dia</TableHead>
+                        <TableHead>mg/kg/dia</TableHead>
+                        <TableHead>Status</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {titulationSteps.map((s) => (
+                        <TableRow key={s.week} className={
+                          s.status === "manutenção" ? "bg-primary/10" : ""
+                        }>
+                          <TableCell className="font-medium">{s.week}</TableCell>
+                          <TableCell>{s.days}</TableCell>
+                          <TableCell>{s.dropsPerDose}</TableCell>
+                          <TableCell>{s.frequency}</TableCell>
+                          <TableCell>{s.mgCanPerDose}</TableCell>
+                          <TableCell>{s.mgCbdPerDose}</TableCell>
+                          <TableCell className="font-semibold">{s.mgCbdPerDay}</TableCell>
+                          <TableCell>{s.mgKgPerDay}</TableCell>
+                          <TableCell>
+                            {s.status === "manutenção" && <Badge className="bg-primary">Manutenção</Badge>}
+                            {s.status === "titulação" && <Badge variant="secondary">Titulação</Badge>}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
 
-              {/* Equilibrium box */}
-              {titulationSteps.find(s => s.status === "target") && (
+              {/* Maintenance info */}
+              {titulationSteps.find(s => s.status === "manutenção") && (
                 <div className="p-4 rounded-lg bg-primary/10 border border-primary/30">
-                  <p className="font-semibold text-primary">Dose de equilíbrio estimada</p>
+                  <p className="font-semibold text-primary">Dose de manutenção</p>
                   <p className="text-sm">
-                    {titulationSteps.find(s => s.status === "target")!.dropsPerDose} gotas/dose (12/12h) = {titulationSteps.find(s => s.status === "target")!.dropsPerDay} gotas/dia = {titulationSteps.find(s => s.status === "target")!.mgCbdPerDay} mg CBD/dia
+                    {maintenanceDrops} gotas/dose (12/12h) = {maintenanceDrops * 2} gotas/dia = {titulationSteps.find(s => s.status === "manutenção")!.mgCbdPerDay} mg CBD/dia — até retorno médico em 30 dias
                   </p>
                 </div>
               )}
 
               {/* Bottle calculation */}
               <div className="p-4 rounded-lg bg-muted space-y-3">
-                <p className="font-semibold">Cálculo de frascos</p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <Label>Duração</Label>
-                    <Select value={String(durationMonths)} onValueChange={v => setDurationMonths(Number(v))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {[1, 2, 3, 6].map(m => <SelectItem key={m} value={String(m)}>{m} mês(es)</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Base do cálculo</Label>
-                    <Select value={bottleBasis} onValueChange={v => setBottleBasis(v as any)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="initial">Dose inicial</SelectItem>
-                        <SelectItem value="target">Dose alvo</SelectItem>
-                        <SelectItem value="max">Dose máxima</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Frascos</Label>
-                    <Input type="number" min={1} value={editableBottles} onChange={e => setEditableBottles(Number(e.target.value))} />
+                <p className="font-semibold">Cálculo de frascos (30 dias)</p>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Semana</TableHead>
+                        <TableHead>Gotas/dose</TableHead>
+                        <TableHead>Dias</TableHead>
+                        <TableHead>Gotas consumidas</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {bottleBreakdown.map((b, i) => (
+                        <TableRow key={i}>
+                          <TableCell>{b.week}</TableCell>
+                          <TableCell>{b.dropsPerDose}</TableCell>
+                          <TableCell>{b.days}</TableCell>
+                          <TableCell>{b.drops}</TableCell>
+                        </TableRow>
+                      ))}
+                      <TableRow className="font-bold">
+                        <TableCell colSpan={3}>Total de gotas em 30 dias</TableCell>
+                        <TableCell>{totalDrops30}</TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+                <div className="flex items-center gap-4">
+                  <p className="text-sm">{totalDrops30} gotas ÷ 600 gotas/frasco = <strong>{Math.ceil(totalDrops30 / 600)}</strong> frasco(s)</p>
+                  <div className="flex items-center gap-2">
+                    <Label>Frascos (editável):</Label>
+                    <Input type="number" min={1} className="w-20" value={editableBottles} onChange={e => setEditableBottles(Number(e.target.value))} />
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground">600 gotas/frasco ÷ gotas/dia × dias = frascos necessários. Todos os campos são editáveis.</p>
               </div>
 
               <div className="p-3 rounded bg-muted/50 text-xs text-muted-foreground">
@@ -583,7 +629,7 @@ export default function Prescription() {
                 <p>Canabinoides são metabolizados via CYP3A4 e CYP2C19. Verificar possíveis interações medicamentosas, especialmente com anticoagulantes, antiepilépticos e benzodiazepínicos.</p>
               </div>
 
-              <p className="text-xs text-muted-foreground italic">⚕ Todos os campos são editáveis — o médico é soberano na decisão terapêutica.</p>
+              <p className="text-xs text-muted-foreground italic">⚕ Todas as sugestões são baseadas em literatura clínica. O médico tem autonomia total para ajustar qualquer valor.</p>
 
               <div className="flex justify-between">
                 <Button variant="outline" onClick={() => setStep(4)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
@@ -616,19 +662,22 @@ export default function Prescription() {
                 </div>
                 <div className="p-3 rounded-lg bg-muted">
                   <p className="text-xs text-muted-foreground">Produto</p>
-                  <p className="font-medium">{selectedProduct.name} — {selectedProduct.typeLabel}</p>
+                  <p className="font-medium">{selectedProduct.fullLabel}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{selectedProduct.receituarioType}</p>
                 </div>
                 <div className="p-3 rounded-lg bg-muted">
                   <p className="text-xs text-muted-foreground">Posologia resumida</p>
-                  <p className="font-medium">
-                    Via {via} · Dose inicial: {initialDrops} gotas (12/12h) · Titulação a cada {intervalDays} dias ·
-                    Dose alvo: {doseRange?.target} mg/dia · Dose máxima: {doseRange?.max} mg/dia ·
-                    mg/gota: {((selectedProduct.mgMl * selectedProduct.cbdPct) / selectedProduct.dropsPerMl).toFixed(2)}
+                  <p className="font-medium text-sm">
+                    Via {via} · {time1}h e {time2}h · Dose inicial: {initialDrops} gotas · Incremento: +{increment} gotas a cada {intervalDays} dias · Manutenção: {maintenanceDrops} gotas/dose
                   </p>
                 </div>
                 <div>
                   <Label>Quantidade</Label>
                   <Input value={editQuantity} onChange={e => setEditQuantity(e.target.value)} />
+                </div>
+                <div className="p-3 rounded-lg bg-muted">
+                  <p className="text-xs text-muted-foreground">Data de retorno</p>
+                  <p className="font-medium">{returnDate ? new Date(returnDate + "T12:00:00").toLocaleDateString("pt-BR") : "A definir"}</p>
                 </div>
               </div>
 
