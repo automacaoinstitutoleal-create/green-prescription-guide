@@ -128,15 +128,40 @@ export default function AdminPanel() {
       docPrescriptions.forEach((p) => {
         products[p.product] = (products[p.product] || 0) + 1;
       });
+
+      // Per-patient breakdown for this doctor
+      const patientDetails = docPatients.map((pat) => {
+        const patPrescs = docPrescriptions.filter((p) => p.patient_id === pat.id);
+        const patBottles = patPrescs.reduce((sum, p) => {
+          const pd = p.prescription_data as any;
+          return sum + (pd?.bottles_per_month || pd?.frascosMes || 0);
+        }, 0);
+        const patProducts: Record<string, number> = {};
+        patPrescs.forEach((p) => {
+          patProducts[p.product] = (patProducts[p.product] || 0) + 1;
+        });
+        return { ...pat, totalPrescriptions: patPrescs.length, totalBottles: patBottles, products: patProducts };
+      });
+
       return {
         ...doc,
         totalPatients: docPatients.length,
         totalPrescriptions: docPrescriptions.length,
         totalBottles,
         products,
+        patientDetails,
       };
     });
   }, [doctors, patients, prescriptions]);
+
+  // Global top products
+  const globalTopProducts = useMemo(() => {
+    const products: Record<string, number> = {};
+    prescriptions.forEach((p) => {
+      products[p.product] = (products[p.product] || 0) + 1;
+    });
+    return Object.entries(products).sort((a, b) => b[1] - a[1]);
+  }, [prescriptions]);
 
   if (!authenticated) {
     return (
