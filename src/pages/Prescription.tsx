@@ -187,13 +187,12 @@ export default function Prescription() {
       if (docType === "guia" || docType === "ambos") {
         generatePatientGuidePDF({ doctor: pdfDoctor, patient, prescriptionData, product: selectedProduct });
       }
-      toast.success("Receita salva e PDF(s) gerado(s)!");
+      toast.success("PDF gerado com sucesso! Você pode gerar outro documento ou finalizar.");
     } catch (e) {
       console.error("Erro ao gerar PDF:", e);
       toast.error("Receita salva, mas houve erro ao gerar o PDF.");
     }
     setSaving(false);
-    navigate(`/pacientes/${patient.id}/historico`);
   };
 
   if (loading) {
@@ -696,8 +695,11 @@ export default function Prescription() {
                 </div>
               </div>
 
-              <div className="flex justify-start">
+              <div className="flex justify-between">
                 <Button variant="outline" onClick={() => setStep(5)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
+                <Button onClick={() => navigate(`/pacientes/${patient.id}/historico`)}>
+                  Finalizar Prescrição
+                </Button>
               </div>
             </CardContent>
           </Card>
