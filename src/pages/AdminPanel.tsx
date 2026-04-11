@@ -122,7 +122,7 @@ export default function AdminPanel() {
       const docPatients = patients.filter((p) => p.doctor_id === doc.user_id);
       const totalBottles = docPrescriptions.reduce((sum, p) => {
         const pd = p.prescription_data as any;
-        return sum + (pd?.bottles_per_month || pd?.frascosMes || 0);
+        return sum + (pd?.bottles || pd?.bottles_per_month || pd?.frascosMes || 1);
       }, 0);
       const products: Record<string, number> = {};
       docPrescriptions.forEach((p) => {
@@ -134,7 +134,7 @@ export default function AdminPanel() {
         const patPrescs = docPrescriptions.filter((p) => p.patient_id === pat.id);
         const patBottles = patPrescs.reduce((sum, p) => {
           const pd = p.prescription_data as any;
-          return sum + (pd?.bottles_per_month || pd?.frascosMes || 0);
+          return sum + (pd?.bottles || pd?.bottles_per_month || pd?.frascosMes || 1);
         }, 0);
         const patProducts: Record<string, number> = {};
         patPrescs.forEach((p) => {
