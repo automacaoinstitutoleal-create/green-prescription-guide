@@ -1,6 +1,6 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import type { Product, TitulationStep, TitulationConfig } from "./prescriptionData";
+import { PATHOLOGIES, getDoseRange, type Product, type TitulationStep, type TitulationConfig } from "./prescriptionData";
 
 // ── Shared types ──
 
@@ -36,6 +36,18 @@ interface PrescriptionInfo {
   productFullLabel: string;
   productComposition: string;
   receituarioType: string;
+}
+
+interface GuideScheduleStep {
+  week: number;
+  days: string;
+  dropsPerDose: number;
+  frequency: string;
+  mgCanPerDose: number;
+  mgCbdPerDose: number;
+  mgCbdPerDay: number;
+  mgKgPerDay: number;
+  status: "titulação" | "dose_maxima";
 }
 
 function checkPageBreak(doc: jsPDF, y: number, needed: number): number {
@@ -79,6 +91,90 @@ function viaLabel(via: string): string {
   if (via === "oral") return "oral com alimento";
   if (via === "azeite") return "oral com azeite ou alimento gorduroso";
   return via;
+}
+
+function createGuideScheduleStep(
+  week: number,
+  dropsPerDose: number,
+  intervalDays: number,
+  product: Product,
+  weightKg: number,
+  status: GuideScheduleStep["status"],
+): GuideScheduleStep {
+  const mgCanPerDrop = product.mgMl / product.dropsPerMl;
+  const mgCbdPerDrop = (product.mgMl * product.cbdPct) / product.dropsPerMl;
+  const dayStart = (week - 1) * intervalDays + 1;
+  const dayEnd = dayStart + intervalDays - 1;
+  const dropsPerDay = dropsPerDose * 2;
+
+  return {
+    week,
+    days: `Dia ${dayStart}–${dayEnd}`,
+    dropsPerDose,
+    frequency: "12/12h",
+    mgCanPerDose: +(dropsPerDose * mgCanPerDrop).toFixed(1),
+    mgCbdPerDose: +(dropsPerDose * mgCbdPerDrop).toFixed(1),
+    mgCbdPerDay: +(dropsPerDay * mgCbdPerDrop).toFixed(1),
+    mgKgPerDay: weightKg > 0 ? +(dropsPerDay * mgCbdPerDrop / weightKg).toFixed(2) : 0,
+    status,
+  };
+}
+
+function buildPatientGuideSchedule(pd: PrescriptionInfo, product: Product) {
+  const pathology = PATHOLOGIES.find((item) => item.name === pd.pathology);
+  const weightKg = pd.patientWeight ?? 0;
+
+  if (!pathology || weightKg <= 0) {
+    return {
+      steps: pd.titulationSteps.map<GuideScheduleStep>((step) => ({
+        week: step.week,
+        days: step.days,
+        dropsPerDose: step.dropsPerDose,
+        frequency: step.frequency,
+        mgCanPerDose: step.mgCanPerDose,
+        mgCbdPerDose: step.mgCbdPerDose,
+        mgCbdPerDay: step.mgCbdPerDay,
+        mgKgPerDay: step.mgKgPerDay,
+        status: step.status === "manutenção" ? "dose_maxima" : "titulação",
+      })),
+      maxMgDay: null as number | null,
+    };
+  }
+
+  const doseRange = getDoseRange(pathology, weightKg);
+  const mgCbdPerDrop = (product.mgMl * product.cbdPct) / product.dropsPerMl;
+  const exactTargetDropsPerDose = doseRange.max / (mgCbdPerDrop * 2);
+  const targetDropsPerDose = Math.max(pd.config.initialDrops, Math.round(exactTargetDropsPerDose));
+  const steps: GuideScheduleStep[] = [];
+
+  let week = 1;
+  let dropsPerDose = pd.config.initialDrops;
+
+  while (week <= 52) {
+    const reachedMaxDose = dropsPerDose >= targetDropsPerDose;
+
+    steps.push(
+      createGuideScheduleStep(
+        week,
+        dropsPerDose,
+        pd.config.intervalDays,
+        product,
+        weightKg,
+        reachedMaxDose ? "dose_maxima" : "titulação",
+      ),
+    );
+
+    if (reachedMaxDose) break;
+
+    const nextDrops = dropsPerDose + pd.config.increment;
+    dropsPerDose = nextDrops >= targetDropsPerDose ? targetDropsPerDose : nextDrops;
+    week += 1;
+  }
+
+  return {
+    steps,
+    maxMgDay: doseRange.max,
+  };
 }
 
 // ═══════════════════════════════════════════════════
@@ -213,6 +309,8 @@ export function generatePatientGuidePDF({ doctor, patient, prescriptionData: pd,
   const doc = new jsPDF();
   const pw = doc.internal.pageSize.getWidth();
   const cfg = pd.config;
+  const { steps: guideScheduleSteps, maxMgDay } = buildPatientGuideSchedule(pd, product);
+  const finalGuideStep = guideScheduleSteps[guideScheduleSteps.length - 1];
   let y = 20;
 
   // Green header
@@ -270,35 +368,32 @@ export function generatePatientGuidePDF({ doctor, patient, prescriptionData: pd,
   doc.text("3. SEU CRONOGRAMA COMPLETO DE USO", 20, y); y += 5;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
-  doc.text("As primeiras 4 semanas também constam na sua receita médica.", 20, y); y += 5;
+  doc.text("A receita mostra o início do ajuste; este guia traz a progressão completa até a dose máxima da patologia.", 20, y); y += 5;
 
-  const titSteps = pd.titulationSteps.filter(s => s.status === "titulação");
-  const maintStep = pd.titulationSteps.find(s => s.status === "manutenção");
-  const maintenanceDisplayPeriod = (() => {
-    if (!maintStep) return null;
-    const startMatch = maintStep.days.match(/(\d+)/);
-    const startDay = startMatch ? parseInt(startMatch[1], 10) : ((titSteps[titSteps.length - 1]?.week || 0) * cfg.intervalDays) + 1;
-    const endDay = startDay + cfg.intervalDays - 1;
-    return `Dia ${startDay}–${endDay}`;
-  })();
-
-  titSteps.forEach(s => {
+  guideScheduleSteps.forEach((s) => {
     y = checkPageBreak(doc, y, 10);
     doc.setFont("helvetica", "bold");
-    doc.text(`Semana ${s.week} (${s.days}):`, 24, y); y += 4;
+    doc.text(
+      s.status === "dose_maxima"
+        ? `Semana ${s.week} (${s.days}) — Dose máxima da patologia:`
+        : `Semana ${s.week} (${s.days}):`,
+      24,
+      y,
+    ); y += 4;
     doc.setFont("helvetica", "normal");
     doc.text(`  ${cfg.time1}h → ${s.dropsPerDose} gotas · ${cfg.time2}h → ${s.dropsPerDose} gotas`, 28, y); y += 5;
   });
 
-  if (maintStep && maintenanceDisplayPeriod) {
+  if (finalGuideStep) {
     y = checkPageBreak(doc, y, 10);
-    doc.setFont("helvetica", "bold");
-    doc.text(`Semana ${maintStep.week} (${maintenanceDisplayPeriod}) — Manutenção:`, 24, y); y += 4;
     doc.setFont("helvetica", "normal");
-    doc.text(`  ${cfg.time1}h → ${maintStep.dropsPerDose} gotas · ${cfg.time2}h → ${maintStep.dropsPerDose} gotas`, 28, y); y += 5;
-
+    doc.text(
+      `Ao atingir a semana ${finalGuideStep.week}, correspondente à dose máxima prevista para ${pd.pathology}${maxMgDay ? ` (~${maxMgDay.toFixed(0)} mg CBD/dia)` : ""}, não aumente além disso sem nova orientação médica.`,
+      28,
+      y,
+    ); y += 5;
     y = checkPageBreak(doc, y, 8);
-    doc.text("Manter esta dose até sua consulta de retorno.", 28, y); y += 5;
+    doc.text("Se houver efeitos adversos, volte para a dose da semana anterior e entre em contato com o consultório.", 28, y); y += 5;
   }
 
   y += 2;
@@ -315,7 +410,7 @@ export function generatePatientGuidePDF({ doctor, patient, prescriptionData: pd,
     startY: y,
     head: [["Semana", "Período", "Gotas/dose", "Freq.", "mg can./dose", "mg CBD/dose", "mg CBD/dia", "mg/kg/dia", "Status"]],
     body: [
-      ...titSteps.map(s => [
+      ...guideScheduleSteps.map(s => [
         `Sem. ${s.week}`,
         s.days,
         s.dropsPerDose,
@@ -324,21 +419,8 @@ export function generatePatientGuidePDF({ doctor, patient, prescriptionData: pd,
         s.mgCbdPerDose,
         s.mgCbdPerDay,
         s.mgKgPerDay,
-        "Titulação",
+        s.status === "dose_maxima" ? "Dose máxima" : "Titulação",
       ]),
-      ...(maintStep
-        ? [[
-            `Sem. ${maintStep.week}`,
-            maintenanceDisplayPeriod ?? maintStep.days,
-            maintStep.dropsPerDose,
-            maintStep.frequency,
-            maintStep.mgCanPerDose,
-            maintStep.mgCbdPerDose,
-            maintStep.mgCbdPerDay,
-            maintStep.mgKgPerDay,
-            "Manutenção",
-          ]]
-        : []),
     ],
     theme: "grid",
     headStyles: { fillColor: [29, 158, 117], fontSize: 7 },
