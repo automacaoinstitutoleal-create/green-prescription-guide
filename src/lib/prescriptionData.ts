@@ -54,7 +54,11 @@ export interface Product {
   dropsPerMl: number; // 20
   dropsPerBottle: number; // 600
   cbdPct: number; // fraction, e.g. 0.65
+  cbdMg: number; // total CBD mg in bottle
   description: string;
+  fullLabel: string; // full commercial name for prescription
+  compositionLabel: string; // composition line for prescription
+  receituarioType: string; // "Receituário tipo C" or "tipo B"
   clinicalJustification: string;
   cannabinoidJustification: string;
   cannabinoids: CannabinoidRow[];
@@ -76,7 +80,11 @@ export const PRODUCTS: Product[] = [
     dropsPerMl: 20,
     dropsPerBottle: 600,
     cbdPct: 0.65,
+    cbdMg: 4704,
     description: "7237 mg/30 mL · 241 mg/mL · 20 gotas/mL",
+    fullLabel: "GREENLION HARMONY 7237MG — Óleo de canabinoides de amplo espectro",
+    compositionLabel: "Concentração: 7237mg / 30ml (241mg/mL) — Sem THC\nComposição: CBD 65% (4704mg) · CBG-A 10% · CBD-A 10% · CBN 4% · CBC 4% · CBDV 5% · Terpenos 2%",
+    receituarioType: "Receituário tipo C — Controle especial",
     clinicalJustification: "Formulação livre de THC, indicada para pacientes que necessitam de efeito ansiolítico e neuroprotetor sem componentes psicoativos.",
     cannabinoidJustification: "Alto teor de CBD (65%) com CBG-A e CBD-A como precursores que potencializam o efeito entourage. CBN auxilia no sono e CBC contribui com efeito anti-inflamatório.",
     cannabinoids: [
@@ -99,7 +107,11 @@ export const PRODUCTS: Product[] = [
     dropsPerMl: 20,
     dropsPerBottle: 600,
     cbdPct: 0.60,
+    cbdMg: 4342,
     description: "7237 mg/30 mL · 241 mg/mL · 20 gotas/mL",
+    fullLabel: "GREENLION BALANCE 7237MG — Óleo de canabinoides de amplo espectro",
+    compositionLabel: "Concentração: 7237mg / 30ml (241mg/mL) — Δ8-THC ≤ 0,2%\nComposição: CBD 60% (4342mg) · CBG-A 10% · CBN 6% · CBC-A 9% · CBDV 5% · Terpenos 9,7%",
+    receituarioType: "Receituário tipo B — Controle especial",
     clinicalJustification: "Formulação balanceada com traços de Δ8-THC, indicada para insônia, doenças autoimunes e condições onde o efeito entourage completo é desejável.",
     cannabinoidJustification: "CBD 60% como base com micro-doses de Δ8-THC (0,2%) que potencializam o efeito analgésico sem psicoatividade significativa. Alto teor de terpenos (9,7%) maximiza o efeito entourage.",
     cannabinoids: [
@@ -123,7 +135,11 @@ export const PRODUCTS: Product[] = [
     dropsPerMl: 20,
     dropsPerBottle: 600,
     cbdPct: 0.58,
+    cbdMg: 4198,
     description: "7237 mg/30 mL · 241 mg/mL · 20 gotas/mL",
+    fullLabel: "GREENLION RELIEF 7237MG — Óleo de canabinoides de amplo espectro",
+    compositionLabel: "Concentração: 7237mg / 30ml (241mg/mL) — Δ9-THC ≤ 0,2%\nComposição: CBD 58% (4198mg) · CBG 10% · CBN 6% · CBC 8% · CBL 5% · Terpenos 12,7%",
+    receituarioType: "Receituário tipo B — Controle especial",
     clinicalJustification: "Formulação para dor e inflamação com traços de Δ9-THC, indicada para dor crônica, fibromialgia, câncer e esclerose múltipla.",
     cannabinoidJustification: "CBD 58% combinado com micro-doses de Δ9-THC (0,2%) e alto teor de CBG (10%) e CBC (8%) para potente efeito anti-inflamatório e analgésico. Terpenos 12,7% maximizam a biodisponibilidade.",
     cannabinoids: [
@@ -178,65 +194,121 @@ export function calcBottles(dropsPerDay: number, product: Product, months: numbe
   return Math.ceil(totalDrops / product.dropsPerBottle);
 }
 
-// ── Titulation Protocol ──
+// ── New Titulation Protocol (start low, go slow — fixed increments) ──
 
 export interface TitulationStep {
   week: number;
   days: string;
-  dropsPerDose: number;   // gotas por tomada (12/12h)
+  dropsPerDose: number;
   frequency: string;
-  mgCanPerDose: number;   // mg canabinoides por dose
-  mgCbdPerDose: number;   // mg CBD por dose
-  mgCbdPerDay: number;    // mg CBD por dia
-  mgKgPerDay: number;     // mg/kg/dia
-  dropsPerDay: number;    // gotas/dia
-  status: "normal" | "target" | "above_max";
+  mgCanPerDose: number;
+  mgCbdPerDose: number;
+  mgCbdPerDay: number;
+  mgKgPerDay: number;
+  dropsPerDay: number;
+  status: "titulação" | "manutenção";
+}
+
+export interface TitulationConfig {
+  initialDrops: number;       // 1-10
+  increment: number;          // +1, +2, or +3
+  intervalDays: number;       // 5, 7, or 14
+  maintenanceDrops: number;   // dose de manutenção
+  via: string;
+  time1: string;              // e.g. "08:00"
+  time2: string;              // e.g. "20:00"
+  returnDate: string;         // ISO date
 }
 
 export function generateTitulationProtocol(
-  initialDropsPerDose: number,
+  config: TitulationConfig,
   product: Product,
   weightKg: number,
-  doseTargetMgDay: number,
-  doseMaxMgDay: number,
-  intervalDays: number,
 ): TitulationStep[] {
   const steps: TitulationStep[] = [];
-  let drops = initialDropsPerDose;
-  let week = 1;
   const mgPerDrop = product.mgMl / product.dropsPerMl; // mg total per drop
   const mgCbdPerDrop = (product.mgMl * product.cbdPct) / product.dropsPerMl;
 
-  while (week <= 12) {
+  let drops = config.initialDrops;
+  let week = 1;
+
+  // Titulation weeks: increment until reaching maintenance dose
+  while (drops < config.maintenanceDrops && week <= 12) {
     const dropsDay = drops * 2;
-    const mgCanPerDose = +(drops * mgPerDrop).toFixed(1);
-    const mgCbdPerDose = +(drops * mgCbdPerDrop).toFixed(1);
-    const mgCbdDay = +(dropsDay * mgCbdPerDrop).toFixed(1);
-    const mgKgDay = weightKg > 0 ? +(mgCbdDay / weightKg).toFixed(2) : 0;
-
-    let status: TitulationStep["status"] = "normal";
-    if (mgCbdDay >= doseTargetMgDay && mgCbdDay <= doseMaxMgDay) status = "target";
-    if (mgCbdDay > doseMaxMgDay) status = "above_max";
-
-    const dayStart = (week - 1) * intervalDays + 1;
-    const dayEnd = week * intervalDays;
+    const dayStart = (week - 1) * config.intervalDays + 1;
+    const dayEnd = week * config.intervalDays;
 
     steps.push({
       week,
       days: `Dia ${dayStart}–${dayEnd}`,
       dropsPerDose: drops,
       frequency: "12/12h",
-      mgCanPerDose,
-      mgCbdPerDose,
-      mgCbdPerDay: mgCbdDay,
-      mgKgPerDay: mgKgDay,
+      mgCanPerDose: +(drops * mgPerDrop).toFixed(1),
+      mgCbdPerDose: +(drops * mgCbdPerDrop).toFixed(1),
+      mgCbdPerDay: +(dropsDay * mgCbdPerDrop).toFixed(1),
+      mgKgPerDay: weightKg > 0 ? +(dropsDay * mgCbdPerDrop / weightKg).toFixed(2) : 0,
       dropsPerDay: dropsDay,
-      status,
+      status: "titulação",
     });
 
-    if (status === "above_max") break;
-    drops = drops * 2;
+    drops += config.increment;
     week++;
   }
+
+  // Maintenance step
+  const maintDrops = config.maintenanceDrops;
+  const maintDropsDay = maintDrops * 2;
+  const dayStart = (week - 1) * config.intervalDays + 1;
+  steps.push({
+    week,
+    days: `Dia ${dayStart}+`,
+    dropsPerDose: maintDrops,
+    frequency: "12/12h",
+    mgCanPerDose: +(maintDrops * mgPerDrop).toFixed(1),
+    mgCbdPerDose: +(maintDrops * mgCbdPerDrop).toFixed(1),
+    mgCbdPerDay: +(maintDropsDay * mgCbdPerDrop).toFixed(1),
+    mgKgPerDay: weightKg > 0 ? +(maintDropsDay * mgCbdPerDrop / weightKg).toFixed(2) : 0,
+    dropsPerDay: maintDropsDay,
+    status: "manutenção",
+  });
+
   return steps;
+}
+
+/** Calculate total drops consumed over the titration + remaining days up to 30,
+ *  then convert to bottles. Returns { totalDrops, weeklyBreakdown, bottles }. */
+export function calcBottlesFromSchedule(
+  config: TitulationConfig,
+  product: Product,
+): { totalDrops: number; weeklyBreakdown: { week: number; drops: number; dropsPerDose: number; days: number }[]; bottles: number } {
+  const breakdown: { week: number; drops: number; dropsPerDose: number; days: number }[] = [];
+  let totalDrops = 0;
+  let daysUsed = 0;
+  let drops = config.initialDrops;
+  let week = 1;
+
+  // Titration weeks
+  while (drops < config.maintenanceDrops && daysUsed < 30 && week <= 12) {
+    const daysThisWeek = Math.min(config.intervalDays, 30 - daysUsed);
+    const weekDrops = drops * 2 * daysThisWeek;
+    breakdown.push({ week, drops: weekDrops, dropsPerDose: drops, days: daysThisWeek });
+    totalDrops += weekDrops;
+    daysUsed += daysThisWeek;
+    drops += config.increment;
+    week++;
+  }
+
+  // Remaining days at maintenance dose
+  if (daysUsed < 30) {
+    const remainingDays = 30 - daysUsed;
+    const weekDrops = config.maintenanceDrops * 2 * remainingDays;
+    breakdown.push({ week, drops: weekDrops, dropsPerDose: config.maintenanceDrops, days: remainingDays });
+    totalDrops += weekDrops;
+  }
+
+  return {
+    totalDrops,
+    weeklyBreakdown: breakdown,
+    bottles: Math.ceil(totalDrops / product.dropsPerBottle),
+  };
 }
