@@ -13,6 +13,7 @@ import Prescription from "./pages/Prescription";
 import PatientHistory from "./pages/PatientHistory";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
+import AdminPanel from "./pages/AdminPanel";
 
 const queryClient = new QueryClient();
 
@@ -26,6 +27,7 @@ const App = () => (
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/cadastro" element={<Register />} />
+            <Route path="/admin" element={<AdminPanel />} />
             <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/perfil" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
             <Route path="/pacientes/novo" element={<ProtectedRoute><NewPatient /></ProtectedRoute>} />
