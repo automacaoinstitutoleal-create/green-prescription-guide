@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, Fragment } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -128,15 +128,40 @@ export default function AdminPanel() {
       docPrescriptions.forEach((p) => {
         products[p.product] = (products[p.product] || 0) + 1;
       });
+
+      // Per-patient breakdown for this doctor
+      const patientDetails = docPatients.map((pat) => {
+        const patPrescs = docPrescriptions.filter((p) => p.patient_id === pat.id);
+        const patBottles = patPrescs.reduce((sum, p) => {
+          const pd = p.prescription_data as any;
+          return sum + (pd?.bottles_per_month || pd?.frascosMes || 0);
+        }, 0);
+        const patProducts: Record<string, number> = {};
+        patPrescs.forEach((p) => {
+          patProducts[p.product] = (patProducts[p.product] || 0) + 1;
+        });
+        return { ...pat, totalPrescriptions: patPrescs.length, totalBottles: patBottles, products: patProducts };
+      });
+
       return {
         ...doc,
         totalPatients: docPatients.length,
         totalPrescriptions: docPrescriptions.length,
         totalBottles,
         products,
+        patientDetails,
       };
     });
   }, [doctors, patients, prescriptions]);
+
+  // Global top products
+  const globalTopProducts = useMemo(() => {
+    const products: Record<string, number> = {};
+    prescriptions.forEach((p) => {
+      products[p.product] = (products[p.product] || 0) + 1;
+    });
+    return Object.entries(products).sort((a, b) => b[1] - a[1]);
+  }, [prescriptions]);
 
   if (!authenticated) {
     return (
@@ -232,85 +257,87 @@ export default function AdminPanel() {
           </CardContent>
         </Card>
 
-        {/* Doctors Table */}
+        {/* Produtos mais receitados (global) */}
         <Card>
           <CardHeader>
-            <CardTitle>Médicos e Prescrições</CardTitle>
+            <CardTitle>Produtos Mais Receitados (Todos os Médicos)</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Médico</TableHead>
-                  <TableHead>CRM</TableHead>
-                  <TableHead>Especialidade</TableHead>
-                  <TableHead>Pacientes</TableHead>
-                  <TableHead>Prescrições</TableHead>
-                  <TableHead>Frascos</TableHead>
-                  <TableHead>Produtos</TableHead>
-                  <TableHead></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {doctorStats.map((doc) => (
-                  <TableRow key={doc.id}>
-                    <TableCell className="font-medium">{doc.full_name || "Sem nome"}</TableCell>
-                    <TableCell>{doc.crm || "-"}</TableCell>
-                    <TableCell>{doc.specialty || "-"}</TableCell>
-                    <TableCell>{doc.totalPatients}</TableCell>
-                    <TableCell>{doc.totalPrescriptions}</TableCell>
-                    <TableCell>{doc.totalBottles}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {Object.entries(doc.products).map(([prod, count]) => (
-                          <Badge key={prod} variant="secondary" className="text-xs">
-                            {prod}: {count}
-                          </Badge>
-                        ))}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setDeleteTarget({ id: doc.id, type: "doctor", name: doc.full_name })}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <div className="flex flex-wrap gap-3">
+              {globalTopProducts.map(([prod, count]) => (
+                <Badge key={prod} variant="outline" className="text-sm px-3 py-1">
+                  {prod}: <strong className="ml-1">{count} prescrições</strong>
+                </Badge>
+              ))}
+              {globalTopProducts.length === 0 && (
+                <p className="text-sm text-muted-foreground">Nenhuma prescrição encontrada</p>
+              )}
+            </div>
           </CardContent>
         </Card>
 
-        {/* Patients Table */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Pacientes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Paciente</TableHead>
-                  <TableHead>CPF</TableHead>
-                  <TableHead>Médico</TableHead>
-                  <TableHead>Prescrições</TableHead>
-                  <TableHead></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {patients.map((pat) => {
-                  const doc = doctors.find((d) => d.user_id === pat.doctor_id);
-                  const patPrescriptions = prescriptions.filter((p) => p.patient_id === pat.id);
-                  return (
+        {/* Doctors Table with per-patient breakdown */}
+        {doctorStats.map((doc) => (
+          <Card key={doc.id}>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Stethoscope className="h-5 w-5" />
+                  {doc.full_name || "Sem nome"}
+                  <span className="text-sm font-normal text-muted-foreground">— CRM {doc.crm || "-"} · {doc.specialty || "-"}</span>
+                </CardTitle>
+                <div className="flex gap-4 mt-2 text-sm text-muted-foreground">
+                  <span>{doc.totalPatients} pacientes</span>
+                  <span>{doc.totalPrescriptions} prescrições</span>
+                  <span className="font-semibold text-foreground">{doc.totalBottles} frascos total</span>
+                </div>
+                <div className="flex flex-wrap gap-1 mt-2">
+                  <span className="text-xs text-muted-foreground mr-1">Produtos mais receitados:</span>
+                  {Object.entries(doc.products)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([prod, count]) => (
+                      <Badge key={prod} variant="secondary" className="text-xs">
+                        {prod}: {count}
+                      </Badge>
+                    ))}
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setDeleteTarget({ id: doc.id, type: "doctor", name: doc.full_name })}
+              >
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Paciente</TableHead>
+                    <TableHead>CPF</TableHead>
+                    <TableHead>Prescrições</TableHead>
+                    <TableHead>Frascos/mês</TableHead>
+                    <TableHead>Produtos</TableHead>
+                    <TableHead></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {doc.patientDetails.map((pat) => (
                     <TableRow key={pat.id}>
                       <TableCell className="font-medium">{pat.full_name}</TableCell>
                       <TableCell>{pat.cpf}</TableCell>
-                      <TableCell>{doc?.full_name || "-"}</TableCell>
-                      <TableCell>{patPrescriptions.length}</TableCell>
+                      <TableCell>{pat.totalPrescriptions}</TableCell>
+                      <TableCell className="font-semibold">{pat.totalBottles}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {Object.entries(pat.products).map(([prod, count]) => (
+                            <Badge key={prod} variant="outline" className="text-xs">
+                              {prod}: {count}
+                            </Badge>
+                          ))}
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <Button
                           variant="ghost"
@@ -321,12 +348,19 @@ export default function AdminPanel() {
                         </Button>
                       </TableCell>
                     </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                  ))}
+                  {doc.patientDetails.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-muted-foreground">
+                        Nenhum paciente
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* Delete Confirmation */}
