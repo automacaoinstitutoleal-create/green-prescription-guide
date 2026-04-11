@@ -272,13 +272,12 @@ export function generatePatientGuidePDF({ doctor, patient, prescriptionData: pd,
   doc.setFontSize(8);
   doc.text("As primeiras 4 semanas também constam na sua receita médica.", 20, y); y += 5;
 
-  // Build complete week-by-week schedule until day 30 (or return date)
-  const totalDays = 30;
+  // Build complete week-by-week schedule showing ALL titulation weeks + maintenance until day 30
   const titSteps = pd.titulationSteps.filter(s => s.status === "titulação");
   const maintStep = pd.titulationSteps.find(s => s.status === "manutenção");
   const maintDrops = maintStep?.dropsPerDose || cfg.maintenanceDrops;
 
-  // Show all titulation steps
+  // Show ALL titulation steps (may go beyond day 30)
   titSteps.forEach(s => {
     y = checkPageBreak(doc, y, 10);
     doc.setFont("helvetica", "bold");
@@ -287,19 +286,19 @@ export function generatePatientGuidePDF({ doctor, patient, prescriptionData: pd,
     doc.text(`  ${cfg.time1}h → ${s.dropsPerDose} gotas · ${cfg.time2}h → ${s.dropsPerDose} gotas`, 28, y); y += 5;
   });
 
-  // Continue with maintenance weeks until day 30
+  // Continue with maintenance weeks until at least day 30
   if (maintStep) {
     const lastTitStep = titSteps[titSteps.length - 1];
-    // Parse last titulation day end
     const lastDayMatch = lastTitStep?.days.match(/(\d+)$/);
     const lastTitDay = lastDayMatch ? parseInt(lastDayMatch[1]) : 0;
+    const minDays = Math.max(30, lastTitDay); // ensure we go at least to day 30
     
-    if (lastTitDay < totalDays) {
+    if (lastTitDay < minDays) {
       let weekNum = (lastTitStep?.week || 0) + 1;
       let dayStart = lastTitDay + 1;
       
-      while (dayStart <= totalDays) {
-        const dayEnd = Math.min(dayStart + 6, totalDays);
+      while (dayStart <= minDays) {
+        const dayEnd = Math.min(dayStart + 6, minDays);
         y = checkPageBreak(doc, y, 10);
         doc.setFont("helvetica", "bold");
         doc.text(`Semana ${weekNum} (Dia ${dayStart}–${dayEnd}) — Manutenção:`, 24, y); y += 4;
