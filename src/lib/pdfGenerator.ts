@@ -272,8 +272,13 @@ export function generatePatientGuidePDF({ doctor, patient, prescriptionData: pd,
   doc.setFontSize(8);
   doc.text("As primeiras 4 semanas também constam na sua receita médica.", 20, y); y += 5;
 
-  // Titration steps as text
+  // Build complete week-by-week schedule until day 30 (or return date)
+  const totalDays = 30;
   const titSteps = pd.titulationSteps.filter(s => s.status === "titulação");
+  const maintStep = pd.titulationSteps.find(s => s.status === "manutenção");
+  const maintDrops = maintStep?.dropsPerDose || cfg.maintenanceDrops;
+
+  // Show all titulation steps
   titSteps.forEach(s => {
     y = checkPageBreak(doc, y, 10);
     doc.setFont("helvetica", "bold");
@@ -282,13 +287,32 @@ export function generatePatientGuidePDF({ doctor, patient, prescriptionData: pd,
     doc.text(`  ${cfg.time1}h → ${s.dropsPerDose} gotas · ${cfg.time2}h → ${s.dropsPerDose} gotas`, 28, y); y += 5;
   });
 
-  const maintStep = pd.titulationSteps.find(s => s.status === "manutenção");
+  // Continue with maintenance weeks until day 30
   if (maintStep) {
-    y = checkPageBreak(doc, y, 10);
-    doc.setFont("helvetica", "bold");
-    doc.text(`A partir do ${maintStep.days.replace("Dia ", "dia ").replace("+", "")}: ${maintStep.dropsPerDose} gotas de manhã e à noite`, 24, y); y += 4;
+    const lastTitStep = titSteps[titSteps.length - 1];
+    // Parse last titulation day end
+    const lastDayMatch = lastTitStep?.days.match(/(\d+)$/);
+    const lastTitDay = lastDayMatch ? parseInt(lastDayMatch[1]) : 0;
+    
+    if (lastTitDay < totalDays) {
+      let weekNum = (lastTitStep?.week || 0) + 1;
+      let dayStart = lastTitDay + 1;
+      
+      while (dayStart <= totalDays) {
+        const dayEnd = Math.min(dayStart + 6, totalDays);
+        y = checkPageBreak(doc, y, 10);
+        doc.setFont("helvetica", "bold");
+        doc.text(`Semana ${weekNum} (Dia ${dayStart}–${dayEnd}) — Manutenção:`, 24, y); y += 4;
+        doc.setFont("helvetica", "normal");
+        doc.text(`  ${cfg.time1}h → ${maintDrops} gotas · ${cfg.time2}h → ${maintDrops} gotas`, 28, y); y += 5;
+        dayStart = dayEnd + 1;
+        weekNum++;
+      }
+    }
+    
+    y = checkPageBreak(doc, y, 8);
     doc.setFont("helvetica", "normal");
-    doc.text("— até sua consulta de retorno.", 28, y); y += 5;
+    doc.text("Manter esta dose até sua consulta de retorno.", 28, y); y += 5;
   }
 
   y += 2;
