@@ -272,12 +272,16 @@ export function generatePatientGuidePDF({ doctor, patient, prescriptionData: pd,
   doc.setFontSize(8);
   doc.text("As primeiras 4 semanas também constam na sua receita médica.", 20, y); y += 5;
 
-  // Build complete week-by-week schedule showing ALL titulation weeks + maintenance until day 30
   const titSteps = pd.titulationSteps.filter(s => s.status === "titulação");
   const maintStep = pd.titulationSteps.find(s => s.status === "manutenção");
-  const maintDrops = maintStep?.dropsPerDose || cfg.maintenanceDrops;
+  const maintenanceDisplayPeriod = (() => {
+    if (!maintStep) return null;
+    const startMatch = maintStep.days.match(/(\d+)/);
+    const startDay = startMatch ? parseInt(startMatch[1], 10) : ((titSteps[titSteps.length - 1]?.week || 0) * cfg.intervalDays) + 1;
+    const endDay = startDay + cfg.intervalDays - 1;
+    return `Dia ${startDay}–${endDay}`;
+  })();
 
-  // Show ALL titulation steps (may go beyond day 30)
   titSteps.forEach(s => {
     y = checkPageBreak(doc, y, 10);
     doc.setFont("helvetica", "bold");
@@ -286,31 +290,14 @@ export function generatePatientGuidePDF({ doctor, patient, prescriptionData: pd,
     doc.text(`  ${cfg.time1}h → ${s.dropsPerDose} gotas · ${cfg.time2}h → ${s.dropsPerDose} gotas`, 28, y); y += 5;
   });
 
-  // Continue with maintenance weeks until at least day 30
-  if (maintStep) {
-    const lastTitStep = titSteps[titSteps.length - 1];
-    const lastDayMatch = lastTitStep?.days.match(/(\d+)$/);
-    const lastTitDay = lastDayMatch ? parseInt(lastDayMatch[1]) : 0;
-    const minDays = Math.max(30, lastTitDay); // ensure we go at least to day 30
-    
-    if (lastTitDay < minDays) {
-      let weekNum = (lastTitStep?.week || 0) + 1;
-      let dayStart = lastTitDay + 1;
-      
-      while (dayStart <= minDays) {
-        const dayEnd = Math.min(dayStart + 6, minDays);
-        y = checkPageBreak(doc, y, 10);
-        doc.setFont("helvetica", "bold");
-        doc.text(`Semana ${weekNum} (Dia ${dayStart}–${dayEnd}) — Manutenção:`, 24, y); y += 4;
-        doc.setFont("helvetica", "normal");
-        doc.text(`  ${cfg.time1}h → ${maintDrops} gotas · ${cfg.time2}h → ${maintDrops} gotas`, 28, y); y += 5;
-        dayStart = dayEnd + 1;
-        weekNum++;
-      }
-    }
-    
-    y = checkPageBreak(doc, y, 8);
+  if (maintStep && maintenanceDisplayPeriod) {
+    y = checkPageBreak(doc, y, 10);
+    doc.setFont("helvetica", "bold");
+    doc.text(`Semana ${maintStep.week} (${maintenanceDisplayPeriod}) — Manutenção:`, 24, y); y += 4;
     doc.setFont("helvetica", "normal");
+    doc.text(`  ${cfg.time1}h → ${maintStep.dropsPerDose} gotas · ${cfg.time2}h → ${maintStep.dropsPerDose} gotas`, 28, y); y += 5;
+
+    y = checkPageBreak(doc, y, 8);
     doc.text("Manter esta dose até sua consulta de retorno.", 28, y); y += 5;
   }
 
@@ -327,17 +314,32 @@ export function generatePatientGuidePDF({ doctor, patient, prescriptionData: pd,
   autoTable(doc, {
     startY: y,
     head: [["Semana", "Período", "Gotas/dose", "Freq.", "mg can./dose", "mg CBD/dose", "mg CBD/dia", "mg/kg/dia", "Status"]],
-    body: pd.titulationSteps.map(s => [
-      `Sem. ${s.week}`,
-      s.days,
-      s.dropsPerDose,
-      s.frequency,
-      s.mgCanPerDose,
-      s.mgCbdPerDose,
-      s.mgCbdPerDay,
-      s.mgKgPerDay,
-      s.status === "manutenção" ? "Manutenção" : "Titulação",
-    ]),
+    body: [
+      ...titSteps.map(s => [
+        `Sem. ${s.week}`,
+        s.days,
+        s.dropsPerDose,
+        s.frequency,
+        s.mgCanPerDose,
+        s.mgCbdPerDose,
+        s.mgCbdPerDay,
+        s.mgKgPerDay,
+        "Titulação",
+      ]),
+      ...(maintStep
+        ? [[
+            `Sem. ${maintStep.week}`,
+            maintenanceDisplayPeriod ?? maintStep.days,
+            maintStep.dropsPerDose,
+            maintStep.frequency,
+            maintStep.mgCanPerDose,
+            maintStep.mgCbdPerDose,
+            maintStep.mgCbdPerDay,
+            maintStep.mgKgPerDay,
+            "Manutenção",
+          ]]
+        : []),
+    ],
     theme: "grid",
     headStyles: { fillColor: [29, 158, 117], fontSize: 7 },
     styles: { fontSize: 7 },
