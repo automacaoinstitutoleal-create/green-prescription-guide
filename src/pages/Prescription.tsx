@@ -332,7 +332,7 @@ export default function Prescription() {
                   className="pl-9"
                 />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {filteredPathologies.map((p) => {
                   const range = getDoseRange(p, weight);
                   const isSelected = selectedPathology?.name === p.name;
