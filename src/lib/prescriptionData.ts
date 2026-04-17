@@ -12,6 +12,7 @@ export interface PathologyInfo {
 
 const PATHOLOGIES_UNSORTED: PathologyInfo[] = [
   { name: "Ansiedade / TEPT", cid10: "F41.1", doseType: "fixo", doseStart: 25, doseTarget: 150, doseMax: 600, recommendedProduct: "HARMONY" },
+  { name: "Câncer / Cuidados paliativos", cid10: "C80", doseType: "fixo", doseStart: 25, doseTarget: 200, doseMax: 600, recommendedProduct: "RELIEF" },
   { name: "Autismo (TEA)", cid10: "F84.0", doseType: "mg_kg", doseStart: 1, doseTarget: 5, doseMax: 10, recommendedProduct: "HARMONY" },
   { name: "Doença de Alzheimer", cid10: "G30", doseType: "fixo", doseStart: 25, doseTarget: 150, doseMax: 300, recommendedProduct: "HARMONY" },
   { name: "Doença de Parkinson", cid10: "G20", doseType: "fixo", doseStart: 25, doseTarget: 150, doseMax: 300, recommendedProduct: "HARMONY" },
