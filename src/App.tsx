@@ -14,6 +14,7 @@ import PatientHistory from "./pages/PatientHistory";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 import AdminPanel from "./pages/AdminPanel";
+import ScientificLibrary from "./pages/ScientificLibrary";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +35,7 @@ const App = () => (
             <Route path="/pacientes/:patientId/editar" element={<ProtectedRoute><NewPatient /></ProtectedRoute>} />
             <Route path="/prescricao/:patientId" element={<ProtectedRoute><Prescription /></ProtectedRoute>} />
             <Route path="/pacientes/:patientId/historico" element={<ProtectedRoute><PatientHistory /></ProtectedRoute>} />
+            <Route path="/biblioteca" element={<ProtectedRoute><ScientificLibrary /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
