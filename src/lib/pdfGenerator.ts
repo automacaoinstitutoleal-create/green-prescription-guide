@@ -311,138 +311,152 @@ export function generatePatientGuidePDF({ doctor, patient, prescriptionData: pd,
   const cfg = pd.config;
   const { steps: guideScheduleSteps, maxMgDay } = buildPatientGuideSchedule(pd, product);
   const finalGuideStep = guideScheduleSteps[guideScheduleSteps.length - 1];
+
+  // Margens de segurança
+  const M = 18;                       // margem esquerda/direita
+  const INDENT = 4;                   // recuo para listas
+  const CONTENT_W = pw - M * 2;       // largura útil para texto comum
+  const INDENT_W = pw - M * 2 - INDENT; // largura útil para texto recuado
+  const LH = 4.2;                     // line height base
+
   let y = 20;
 
-  // Green header
+  // Helper: escreve um parágrafo já quebrado, paginando se necessário
+  const writePara = (text: string, opts?: { x?: number; width?: number; size?: number; bold?: boolean; gap?: number }) => {
+    const x = opts?.x ?? M;
+    const width = opts?.width ?? CONTENT_W;
+    const size = opts?.size ?? 9;
+    const bold = opts?.bold ?? false;
+    const gap = opts?.gap ?? 1;
+    doc.setFontSize(size);
+    doc.setFont("helvetica", bold ? "bold" : "normal");
+    const lines = doc.splitTextToSize(text ?? "", width);
+    const lineH = size * 0.42;
+    lines.forEach((ln: string) => {
+      y = checkPageBreak(doc, y, lineH + 1);
+      doc.text(ln, x, y);
+      y += lineH;
+    });
+    y += gap;
+  };
+
+  const writeSectionTitle = (title: string) => {
+    y = checkPageBreak(doc, y, 12);
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(0);
+    const lines = doc.splitTextToSize(title, CONTENT_W);
+    lines.forEach((ln: string) => { doc.text(ln, M, y); y += 5; });
+    y += 1;
+  };
+
+  // ── Cabeçalho verde ──
   doc.setFillColor(29, 158, 117);
   doc.rect(0, 0, pw, 45, "F");
-  doc.setFontSize(16);
+  doc.setFontSize(15);
   doc.setTextColor(255);
   doc.text("Guia de Uso — Greenlion Precision", pw / 2, 14, { align: "center" });
-  doc.setFontSize(10);
-  doc.text(`Paciente: ${patient.full_name} · ${patient.weight ?? "N/I"}kg`, pw / 2, 22, { align: "center" });
-  doc.text(`Produto: ${pd.productFullLabel}`, pw / 2, 28, { align: "center" });
   doc.setFontSize(9);
-  doc.text(`Médico: Dr(a). ${doctor.full_name} · CRM ${doctor.crm}${doctor.phone ? ` · Tel: ${doctor.phone}` : ""}`, pw / 2, 35, { align: "center" });
-  doc.text(`Data: ${new Date().toLocaleDateString("pt-BR")}`, pw / 2, 41, { align: "center" });
+  const headPatient = doc.splitTextToSize(`Paciente: ${patient.full_name} · ${patient.weight ?? "N/I"}kg`, pw - 20);
+  doc.text(headPatient[0], pw / 2, 21, { align: "center" });
+  const headProduct = doc.splitTextToSize(`Produto: ${pd.productFullLabel}`, pw - 20);
+  doc.text(headProduct[0], pw / 2, 27, { align: "center" });
+  doc.setFontSize(8);
+  const headDoc = doc.splitTextToSize(
+    `Médico: Dr(a). ${doctor.full_name} · CRM ${doctor.crm}${doctor.phone ? ` · Tel: ${doctor.phone}` : ""}`,
+    pw - 20,
+  );
+  doc.text(headDoc[0], pw / 2, 34, { align: "center" });
+  doc.text(`Data: ${new Date().toLocaleDateString("pt-BR")}`, pw / 2, 40, { align: "center" });
   y = 55;
-
   doc.setTextColor(0);
 
   // ── Section 1: Por que ──
-  y = checkPageBreak(doc, y, 25);
-  doc.setFontSize(11);
-  doc.setFont("helvetica", "bold");
-  doc.text("1. POR QUE ESTE PRODUTO FOI INDICADO PARA VOCÊ", 20, y); y += 6;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  const j1 = doc.splitTextToSize(product.clinicalJustification, pw - 40);
-  doc.text(j1, 20, y); y += j1.length * 4 + 2;
-  const j2 = doc.splitTextToSize(product.cannabinoidJustification, pw - 40);
-  doc.text(j2, 20, y); y += j2.length * 4 + 6;
+  writeSectionTitle("1. POR QUE ESTE PRODUTO FOI INDICADO PARA VOCÊ");
+  writePara(product.clinicalJustification, { gap: 2 });
+  writePara(product.cannabinoidJustification, { gap: 5 });
 
   // ── Section 2: Como tomar ──
-  y = checkPageBreak(doc, y, 40);
-  doc.setFontSize(11);
-  doc.setFont("helvetica", "bold");
-  doc.text("2. COMO TOMAR O SEU MEDICAMENTO", 20, y); y += 6;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
+  writeSectionTitle("2. COMO TOMAR O SEU MEDICAMENTO");
   const howLines = [
     "Passo a passo:",
-    "1. Agite levemente o frasco antes de usar",
-    "2. Coloque as gotas EMBAIXO DA LÍNGUA",
-    "3. Segure por 60 a 90 segundos sem engolir",
-    "4. Depois engula normalmente",
-    `5. Tome SEMPRE nos mesmos horários: ${cfg.time1}h e ${cfg.time2}h`,
-    "6. Para melhor absorção: tome junto com alimento gorduroso",
-    "   (azeite, abacate, castanhas ou amendoim)",
+    "1. Agite levemente o frasco antes de usar.",
+    "2. Coloque as gotas EMBAIXO DA LÍNGUA.",
+    "3. Segure por 60 a 90 segundos sem engolir.",
+    "4. Depois engula normalmente.",
+    `5. Tome SEMPRE nos mesmos horários: ${cfg.time1}h e ${cfg.time2}h.`,
+    "6. Para melhor absorção, tome junto com alimento gorduroso (azeite, abacate, castanhas ou amendoim).",
   ];
-  howLines.forEach(l => { y = checkPageBreak(doc, y, 5); doc.text(l, 24, y); y += 5; });
-  y += 4;
+  howLines.forEach(l => writePara(l, { x: M + INDENT, width: INDENT_W, gap: 0.5 }));
+  y += 3;
 
   // ── Section 3: Cronograma ──
-  y = checkPageBreak(doc, y, 30);
-  doc.setFontSize(11);
-  doc.setFont("helvetica", "bold");
-  doc.text("3. SEU CRONOGRAMA COMPLETO DE USO", 20, y); y += 5;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.text("A receita mostra o início do ajuste; este guia traz a progressão completa até a dose máxima da patologia.", 20, y); y += 5;
+  writeSectionTitle("3. SEU CRONOGRAMA COMPLETO DE USO");
+  writePara(
+    "A receita mostra o início do ajuste; este guia traz a progressão completa até a dose máxima da patologia.",
+    { size: 8, gap: 2 },
+  );
 
   guideScheduleSteps.forEach((s) => {
-    y = checkPageBreak(doc, y, 10);
-    doc.setFont("helvetica", "bold");
-    doc.text(
-      s.status === "dose_maxima"
-        ? `Semana ${s.week} (${s.days}) — Dose máxima da patologia:`
-        : `Semana ${s.week} (${s.days}):`,
-      24,
-      y,
-    ); y += 4;
-    doc.setFont("helvetica", "normal");
-    doc.text(`  ${cfg.time1}h → ${s.dropsPerDose} gotas · ${cfg.time2}h → ${s.dropsPerDose} gotas`, 28, y); y += 5;
+    const title = s.status === "dose_maxima"
+      ? `Semana ${s.week} (${s.days}) — Dose máxima da patologia:`
+      : `Semana ${s.week} (${s.days}):`;
+    writePara(title, { x: M + INDENT, width: INDENT_W, size: 9, bold: true, gap: 0.2 });
+    writePara(
+      `${cfg.time1}h → ${s.dropsPerDose} gotas · ${cfg.time2}h → ${s.dropsPerDose} gotas`,
+      { x: M + INDENT + 4, width: INDENT_W - 4, size: 9, gap: 1.5 },
+    );
   });
 
   if (finalGuideStep) {
-    const maxLine = `Ao atingir a semana ${finalGuideStep.week}, correspondente à dose máxima prevista para ${pd.pathology}${maxMgDay ? ` (~${maxMgDay.toFixed(0)} mg CBD/dia)` : ""}, não aumente além disso sem nova orientação médica.`;
-    const maxLines = doc.splitTextToSize(maxLine, pw - 48);
-    y = checkPageBreak(doc, y, maxLines.length * 4 + 4);
-    doc.setFont("helvetica", "normal");
-    doc.text(maxLines, 28, y); y += maxLines.length * 4 + 2;
-
-    const advLine = "Se houver efeitos adversos, volte para a dose da semana anterior e entre em contato com o consultório.";
-    const advLines = doc.splitTextToSize(advLine, pw - 48);
-    y = checkPageBreak(doc, y, advLines.length * 4 + 2);
-    doc.text(advLines, 28, y); y += advLines.length * 4 + 3;
+    writePara(
+      `Ao atingir a semana ${finalGuideStep.week}, correspondente à dose máxima prevista para ${pd.pathology}${maxMgDay ? ` (~${maxMgDay.toFixed(0)} mg CBD/dia)` : ""}, não aumente além disso sem nova orientação médica.`,
+      { x: M + INDENT, width: INDENT_W, size: 9, gap: 1.5 },
+    );
+    writePara(
+      "Se houver efeitos adversos, volte para a dose da semana anterior e entre em contato com o consultório.",
+      { x: M + INDENT, width: INDENT_W, size: 9, gap: 3 },
+    );
   }
 
-  y += 2;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
-  doc.text("★ AO FINAL DE 30 DIAS: entre em contato com o consultório.", 24, y); y += 4;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.text("O médico vai avaliar sua resposta e decidir o próximo ajuste de dose.", 28, y); y += 8;
+  writePara("★ AO FINAL DE 30 DIAS: entre em contato com o consultório.", {
+    x: M + INDENT, width: INDENT_W, size: 9, bold: true, gap: 0.5,
+  });
+  writePara("O médico vai avaliar sua resposta e decidir o próximo ajuste de dose.", {
+    x: M + INDENT, width: INDENT_W, size: 8, gap: 5,
+  });
 
-  // Tabela resumida (paciente): apenas o essencial — dados técnicos ficam na ficha do médico
-  y = checkPageBreak(doc, y, 20);
+  // Tabela resumida do cronograma
+  y = checkPageBreak(doc, y, 30);
   autoTable(doc, {
     startY: y,
     head: [["Semana", "Período", "Gotas/dose", "Frequência", "Total/dia", "Status"]],
-    body: [
-      ...guideScheduleSteps.map(s => [
-        `Sem. ${s.week}`,
-        s.days,
-        `${s.dropsPerDose} gotas`,
-        s.frequency,
-        `${Number(s.dropsPerDose) * 2} gotas`,
-        s.status === "dose_maxima" ? "Dose máxima" : "Titulação",
-      ]),
-    ],
+    body: guideScheduleSteps.map(s => [
+      `Sem. ${s.week}`,
+      s.days,
+      `${s.dropsPerDose} gotas`,
+      s.frequency,
+      `${Number(s.dropsPerDose) * 2} gotas`,
+      s.status === "dose_maxima" ? "Dose máxima" : "Titulação",
+    ]),
     theme: "grid",
     headStyles: { fillColor: [29, 158, 117], fontSize: 8, halign: "center", textColor: 255 },
     styles: { fontSize: 8, cellPadding: 2, overflow: "linebreak", valign: "middle" },
     columnStyles: {
       0: { cellWidth: 18, halign: "center" },
-      1: { cellWidth: 32 },
+      1: { cellWidth: 30 },
       2: { cellWidth: 26, halign: "center" },
-      3: { cellWidth: 38 },
-      4: { cellWidth: 26, halign: "center" },
-      5: { cellWidth: 30, halign: "center" },
+      3: { cellWidth: 30 },
+      4: { cellWidth: 24, halign: "center" },
+      5: { cellWidth: 26, halign: "center" },
     },
-    margin: { left: 20, right: 20 },
+    margin: { left: M, right: M },
     tableWidth: "auto",
   });
   y = (doc as any).lastAutoTable.finalY + 8;
 
   // ── Section 4: Sinais de dose alta demais ──
-  y = checkPageBreak(doc, y, 35);
-  doc.setFontSize(11);
-  doc.setFont("helvetica", "bold");
-  doc.text("4. SINAIS DE DOSE ALTA DEMAIS — O QUE FAZER", 20, y); y += 6;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
+  writeSectionTitle("4. SINAIS DE DOSE ALTA DEMAIS — O QUE FAZER");
   const excessLines = [
     "Se sentir qualquer um destes sinais:",
     "• Tontura",
@@ -451,96 +465,81 @@ export function generatePatientGuidePDF({ doctor, patient, prescriptionData: pd,
     "• Náusea",
     "• Desorientação ou mal-estar",
     "",
-    "NÃO SE PREOCUPE — não é perigoso.",
-    "Significa que a dose está um pouco acima do seu limite individual.",
+    "NÃO SE PREOCUPE — não é perigoso. Significa que a dose está um pouco acima do seu limite individual.",
     "",
     "O QUE FAZER IMEDIATAMENTE:",
-    "→ Volte para a dose da semana anterior",
-    `→ Entre em contato com o consultório: ${doctor.phone || ""}`,
-    "→ Não retome a dose maior sem orientação médica",
+    "→ Volte para a dose da semana anterior.",
+    `→ Entre em contato com o consultório${doctor.phone ? `: ${doctor.phone}` : "."}`,
+    "→ Não retome a dose maior sem orientação médica.",
   ];
-  excessLines.forEach(l => { y = checkPageBreak(doc, y, 5); doc.text(l, 24, y); y += 5; });
-  y += 4;
+  excessLines.forEach(l => writePara(l, { x: M + INDENT, width: INDENT_W, gap: 0.5 }));
+  y += 3;
 
   // ── Section 5: Cuidados importantes ──
-  y = checkPageBreak(doc, y, 30);
-  doc.setFontSize(11);
-  doc.setFont("helvetica", "bold");
-  doc.text("5. CUIDADOS IMPORTANTES", 20, y); y += 6;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
+  writeSectionTitle("5. CUIDADOS IMPORTANTES");
   const careLines = [
-    "• Não pare de usar de repente — se precisar parar, reduza 25% por semana e avise o médico",
-    "• Informe TODOS os seus médicos que está usando este medicamento",
-    "  (pode interagir com anticoagulantes, antiepilépticos, antidepressivos)",
-    "• Guarde em local fresco, seco e escuro, longe da luz solar",
-    "• Mantenha fora do alcance de crianças",
-    "• Verifique o número do lote e o COA no QR Code da embalagem",
-    "• Não tome com álcool",
+    "• Não pare de usar de repente — se precisar parar, reduza 25% por semana e avise o médico.",
+    "• Informe TODOS os seus médicos que está usando este medicamento (pode interagir com anticoagulantes, antiepilépticos, antidepressivos).",
+    "• Guarde em local fresco, seco e escuro, longe da luz solar.",
+    "• Mantenha fora do alcance de crianças.",
+    "• Verifique o número do lote e o COA no QR Code da embalagem.",
+    "• Não tome com álcool.",
   ];
-  careLines.forEach(l => { y = checkPageBreak(doc, y, 5); doc.text(l, 24, y); y += 5; });
-  y += 4;
+  careLines.forEach(l => writePara(l, { x: M + INDENT, width: INDENT_W, gap: 0.5 }));
+  y += 3;
 
   // ── Section 6: Retorno ──
-  y = checkPageBreak(doc, y, 35);
-  doc.setFontSize(11);
-  doc.setFont("helvetica", "bold");
-  doc.text("6. RETORNO E ACOMPANHAMENTO", 20, y); y += 6;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-
+  writeSectionTitle("6. RETORNO E ACOMPANHAMENTO");
   const returnDateFormatted = cfg.returnDate
     ? new Date(cfg.returnDate + "T12:00:00").toLocaleDateString("pt-BR")
     : "A definir";
-
   const followLines = [
     `Sua consulta de retorno: ${returnDateFormatted}`,
     "",
     "Nessa consulta o médico vai avaliar:",
-    "• Como você está respondendo ao tratamento",
-    "• Se a dose atual está adequada",
-    "• Se precisa aumentar, reduzir ou manter",
-    "• Se o produto segue sendo o mais indicado",
+    "• Como você está respondendo ao tratamento.",
+    "• Se a dose atual está adequada.",
+    "• Se precisa aumentar, reduzir ou manter.",
+    "• Se o produto segue sendo o mais indicado.",
     "",
     "Para se preparar, anote todo dia:",
-    "• Dose que está tomando",
-    "• Nível de dor ou intensidade dos sintomas (0 a 10)",
-    "• Qualidade do sono",
-    "• Qualquer efeito que tenha sentido",
+    "• Dose que está tomando.",
+    "• Nível de dor ou intensidade dos sintomas (0 a 10).",
+    "• Qualidade do sono.",
+    "• Qualquer efeito que tenha sentido.",
     "",
-    `Contato para dúvidas ou efeitos adversos antes do retorno:`,
-    `Tel: ${doctor.phone || ""}`,
+    "Contato para dúvidas ou efeitos adversos antes do retorno:",
+    `Tel: ${doctor.phone || "(consulte o consultório)"}`,
   ];
-  followLines.forEach(l => { y = checkPageBreak(doc, y, 5); doc.text(l, 24, y); y += 5; });
-  y += 6;
+  followLines.forEach(l => writePara(l, { x: M + INDENT, width: INDENT_W, gap: 0.5 }));
+  y += 4;
 
   // ── Section 7: TCLE ──
-  y = checkPageBreak(doc, y, 55);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.text("7. TCLE — TERMO DE CONSENTIMENTO LIVRE E ESCLARECIDO", 20, y); y += 6;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  const tcle = `Eu, ${patient.full_name}, declaro ter sido informado(a) pelo médico ${doctor.full_name} sobre os potenciais benefícios e riscos do tratamento com ${pd.productFullLabel}, incluindo possibilidade de tontura, sonolência excessiva, boca seca, alterações de apetite e interações com outros medicamentos.\n\nFui orientado(a) sobre o protocolo de titulação e sei que devo entrar em contato com o médico ao sentir efeitos adversos ou ao final de 30 dias para continuidade do tratamento.\n\nAutorizo o início do tratamento conforme prescrição médica.\n\nDeclaro ciência de que o produto não é isento de riscos e não substitui tratamentos convencionais já indicados.\n\nProduto de uso sob controle especial — manter fora do alcance de crianças.`;
-  const tcleLines = doc.splitTextToSize(tcle, pw - 40);
-  doc.text(tcleLines, 20, y);
-  y += tcleLines.length * 3.5 + 10;
+  writeSectionTitle("7. TCLE — TERMO DE CONSENTIMENTO LIVRE E ESCLARECIDO");
+  const tcle = `Eu, ${patient.full_name}, declaro ter sido informado(a) pelo médico ${doctor.full_name} sobre os potenciais benefícios e riscos do tratamento com ${pd.productFullLabel}, incluindo possibilidade de tontura, sonolência excessiva, boca seca, alterações de apetite e interações com outros medicamentos.
 
-  // Signature
+Fui orientado(a) sobre o protocolo de titulação e sei que devo entrar em contato com o médico ao sentir efeitos adversos ou ao final de 30 dias para continuidade do tratamento.
+
+Autorizo o início do tratamento conforme prescrição médica.
+
+Declaro ciência de que o produto não é isento de riscos e não substitui tratamentos convencionais já indicados.
+
+Produto de uso sob controle especial — manter fora do alcance de crianças.`;
+  tcle.split("\n\n").forEach(par => writePara(par, { size: 8, gap: 2 }));
+  y += 4;
+
+  // Assinatura
   y = checkPageBreak(doc, y, 20);
-  doc.setFontSize(9);
-  doc.setTextColor(0);
-  doc.text("Assinatura do paciente / responsável: _______________________", 20, y); y += 6;
-  doc.text(`Data: ___/___/______`, 20, y); y += 10;
+  writePara("Assinatura do paciente / responsável: _______________________", { size: 9, gap: 2 });
+  writePara("Data: ___/___/______", { size: 9, gap: 5 });
 
-  // Footer
+  // Rodapé
+  y = checkPageBreak(doc, y, 10);
   doc.setDrawColor(29, 158, 117);
   doc.setLineWidth(0.3);
-  y = checkPageBreak(doc, y, 10);
-  doc.line(20, y, pw - 20, y); y += 5;
-  doc.setFontSize(8);
+  doc.line(M, y, pw - M, y); y += 5;
   doc.setTextColor(120);
-  doc.text("Este guia é complementar à receita médica. Guarde os dois documentos juntos.", 20, y);
+  writePara("Este guia é complementar à receita médica. Guarde os dois documentos juntos.", { size: 8 });
 
   doc.save(`guia_paciente_${patient.full_name.replace(/\s/g, "_")}_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
