@@ -15,6 +15,7 @@ import {
   PATHOLOGIES, PRODUCTS,
   getDoseRange, mgDayToDropsDay,
   generateTitulationProtocol, calcBottlesFromSchedule,
+  isProductAvailableForPathology,
   type PathologyInfo, type Product, type TitulationStep, type TitulationConfig,
 } from "@/lib/prescriptionData";
 import { generatePrescriptionPDF, generatePatientGuidePDF } from "@/lib/pdfGenerator";
