@@ -385,15 +385,16 @@ export function generatePatientGuidePDF({ doctor, patient, prescriptionData: pd,
   });
 
   if (finalGuideStep) {
-    y = checkPageBreak(doc, y, 10);
+    const maxLine = `Ao atingir a semana ${finalGuideStep.week}, correspondente à dose máxima prevista para ${pd.pathology}${maxMgDay ? ` (~${maxMgDay.toFixed(0)} mg CBD/dia)` : ""}, não aumente além disso sem nova orientação médica.`;
+    const maxLines = doc.splitTextToSize(maxLine, pw - 48);
+    y = checkPageBreak(doc, y, maxLines.length * 4 + 4);
     doc.setFont("helvetica", "normal");
-    doc.text(
-      `Ao atingir a semana ${finalGuideStep.week}, correspondente à dose máxima prevista para ${pd.pathology}${maxMgDay ? ` (~${maxMgDay.toFixed(0)} mg CBD/dia)` : ""}, não aumente além disso sem nova orientação médica.`,
-      28,
-      y,
-    ); y += 5;
-    y = checkPageBreak(doc, y, 8);
-    doc.text("Se houver efeitos adversos, volte para a dose da semana anterior e entre em contato com o consultório.", 28, y); y += 5;
+    doc.text(maxLines, 28, y); y += maxLines.length * 4 + 2;
+
+    const advLine = "Se houver efeitos adversos, volte para a dose da semana anterior e entre em contato com o consultório.";
+    const advLines = doc.splitTextToSize(advLine, pw - 48);
+    y = checkPageBreak(doc, y, advLines.length * 4 + 2);
+    doc.text(advLines, 28, y); y += advLines.length * 4 + 3;
   }
 
   y += 2;
