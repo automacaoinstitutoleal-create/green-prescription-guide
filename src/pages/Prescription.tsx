@@ -620,7 +620,14 @@ export default function Prescription() {
               <CardDescription>Defina os valores exatos do protocolo de titulação — "start low, go slow"</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Selectors row 1 */}
+              {selectedProduct.requiresTypeAWarning && (
+                <div className="p-3 rounded border-2 border-destructive bg-destructive/10 text-sm space-y-1">
+                  <p className="font-bold text-destructive flex items-center gap-1">
+                    <AlertTriangle className="h-4 w-4" /> RECEITUÁRIO TIPO A — THC 1,4% (100mg/frasco · 0,09mg/gota)
+                  </p>
+                  <p>Indicado exclusivamente para cuidados paliativos em situação clínica irreversível ou terminal. Exige <strong>Notificação de Receita A</strong> (talonário especial). Confirme RDC Anvisa 327/2019.</p>
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
                   <Label>Dose inicial (gotas/tomada)</Label>
