@@ -15,6 +15,7 @@ import {
   PATHOLOGIES, PRODUCTS,
   getDoseRange, mgDayToDropsDay,
   generateTitulationProtocol, calcBottlesFromSchedule,
+  isProductAvailableForPathology,
   type PathologyInfo, type Product, type TitulationStep, type TitulationConfig,
 } from "@/lib/prescriptionData";
 import { generatePrescriptionPDF, generatePatientGuidePDF } from "@/lib/pdfGenerator";
@@ -480,76 +481,128 @@ export default function Prescription() {
               <CardTitle>4. Produto</CardTitle>
               <CardDescription>Selecione o produto a ser prescrito</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {PRODUCTS.map((product) => {
-                const isRecommended = selectedPathology?.recommendedProduct === product.name;
-                const isSelected = selectedProduct?.name === product.name;
-                return (
-                  <div
-                    key={product.name}
-                    className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                      isSelected ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
-                    }`}
-                    onClick={() => setSelectedProduct(product)}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <p className="font-bold text-lg">{product.name}</p>
-                        <Badge variant="outline">{product.typeLabel}</Badge>
-                        {isRecommended && <Badge className="bg-primary text-primary-foreground">✓ Indicado para este caso</Badge>}
+            <CardContent className="space-y-6">
+              {(() => {
+                const visibleProducts = PRODUCTS.filter(p => isProductAvailableForPathology(p, selectedPathology));
+                const precision = visibleProducts.filter(p => p.productLine === "PRECISION");
+                const line6000 = visibleProducts.filter(p => p.productLine === "LINE_6000");
+
+                const renderProductCard = (product: Product, opts: { subdued?: boolean } = {}) => {
+                  const isRecommended = selectedPathology?.recommendedProduct === product.name;
+                  const isSelected = selectedProduct?.name === product.name;
+                  const isSecondChoice = product.productLine === "LINE_6000" && product.secondChoiceFor === selectedPathology?.recommendedProduct;
+                  const isTypeA = product.type === "A";
+                  return (
+                    <div
+                      key={product.name}
+                      className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                        isSelected
+                          ? (isTypeA ? "border-destructive bg-destructive/5" : "border-primary bg-primary/5")
+                          : opts.subdued
+                            ? "border-border/60 hover:border-primary/40"
+                            : "border-border hover:border-primary/50"
+                      }`}
+                      onClick={() => setSelectedProduct(product)}
+                    >
+                      <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-bold text-lg">{product.fullLabel.split(" — ")[0]}</p>
+                          <Badge variant={isTypeA ? "destructive" : "outline"}>{product.typeLabel}</Badge>
+                          {isRecommended && <Badge className="bg-primary text-primary-foreground">✓ Indicado para este caso</Badge>}
+                          {isSecondChoice && <Badge variant="secondary">Segunda opção</Badge>}
+                        </div>
+                        {isSelected && <Check className="h-5 w-5 text-primary" />}
                       </div>
-                      {isSelected && <Check className="h-5 w-5 text-primary" />}
-                    </div>
-                    <p className="text-sm text-muted-foreground mb-2">{product.description}</p>
-                    {isSelected && (
-                      <div className="mt-3 space-y-3">
-                        <div className="p-3 rounded bg-muted text-sm">
-                          <p className="font-medium mb-1">Justificativa clínica:</p>
-                          <p>{product.clinicalJustification}</p>
-                        </div>
-                        <div className="p-3 rounded bg-muted text-sm">
-                          <p className="font-medium mb-1">Justificativa canabínica:</p>
-                          <p>{product.cannabinoidJustification}</p>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <Badge variant="secondary">mg/gota: {((product.mgMl * product.cbdPct) / product.dropsPerMl).toFixed(2)}</Badge>
-                          {doseRange && (
-                            <>
-                              <Badge variant="secondary">Alvo: {mgDayToDropsDay(doseRange.target, product)} gotas/dia</Badge>
-                              <Badge variant="secondary">Máx: {mgDayToDropsDay(doseRange.max, product)} gotas/dia</Badge>
-                            </>
+                      <p className="text-sm text-muted-foreground mb-2">{product.description}</p>
+                      {isSelected && (
+                        <div className="mt-3 space-y-3">
+                          {product.requiresTypeAWarning && (
+                            <div className="p-3 rounded border-2 border-destructive bg-destructive/10 text-sm space-y-1">
+                              <p className="font-bold text-destructive flex items-center gap-1">
+                                <AlertTriangle className="h-4 w-4" /> RECEITUÁRIO TIPO A — THC 1,4% (100mg/frasco · 0,09mg/gota)
+                              </p>
+                              <p>Indicado exclusivamente para cuidados paliativos em situação clínica irreversível ou terminal.</p>
+                              <p>Exige <strong>Notificação de Receita A</strong> (talonário especial).</p>
+                              <p>Confirme que o paciente se enquadra nos critérios da <strong>RDC Anvisa 327/2019</strong>.</p>
+                            </div>
                           )}
-                        </div>
-                        {/* Composition table */}
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Canabinoide</TableHead>
-                              <TableHead>%</TableHead>
-                              <TableHead>mg/30mL</TableHead>
-                              <TableHead>mg/mL</TableHead>
-                              <TableHead>mg/gota</TableHead>
-                              <TableHead>Efeito</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {product.cannabinoids.map((c) => (
-                              <TableRow key={c.name}>
-                                <TableCell className="font-medium">{c.name}</TableCell>
-                                <TableCell>{c.pct.toFixed(1)}%</TableCell>
-                                <TableCell>{c.mg30ml}</TableCell>
-                                <TableCell>{c.mgMl}</TableCell>
-                                <TableCell>{c.mgDrop}</TableCell>
-                                <TableCell className="text-xs">{c.effect}</TableCell>
+                          <div className="p-3 rounded bg-muted text-sm">
+                            <p className="font-medium mb-1">Justificativa clínica:</p>
+                            <p>{product.clinicalJustification}</p>
+                          </div>
+                          <div className="p-3 rounded bg-muted text-sm">
+                            <p className="font-medium mb-1">Justificativa canabínica:</p>
+                            <p>{product.cannabinoidJustification}</p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Badge variant="secondary">mg/gota: {((product.mgMl * product.cbdPct) / product.dropsPerMl).toFixed(2)}</Badge>
+                            {doseRange && (
+                              <>
+                                <Badge variant="secondary">Alvo: {mgDayToDropsDay(doseRange.target, product)} gotas/dia</Badge>
+                                <Badge variant="secondary">Máx: {mgDayToDropsDay(doseRange.max, product)} gotas/dia</Badge>
+                              </>
+                            )}
+                          </div>
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Canabinoide</TableHead>
+                                <TableHead>%</TableHead>
+                                <TableHead>mg/30mL</TableHead>
+                                <TableHead>mg/mL</TableHead>
+                                <TableHead>mg/gota</TableHead>
+                                <TableHead>Efeito</TableHead>
                               </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
+                            </TableHeader>
+                            <TableBody>
+                              {product.cannabinoids.map((c) => (
+                                <TableRow key={c.name}>
+                                  <TableCell className="font-medium">{c.name}</TableCell>
+                                  <TableCell>{c.pct.toFixed(1)}%</TableCell>
+                                  <TableCell>{c.mg30ml}</TableCell>
+                                  <TableCell>{c.mgMl}</TableCell>
+                                  <TableCell>{c.mgDrop}</TableCell>
+                                  <TableCell className="text-xs">{c.effect}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+                    </div>
+                  );
+                };
+
+                return (
+                  <>
+                    {precision.length > 0 && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-semibold uppercase tracking-wide text-primary">Linha Precision 7237mg</h3>
+                          <Badge className="bg-primary/80">primeira opção</Badge>
+                        </div>
+                        <div className="space-y-3">{precision.map(p => renderProductCard(p))}</div>
                       </div>
                     )}
-                  </div>
+
+                    {line6000.length > 0 && (
+                      <div className="space-y-3 pt-2">
+                        <div className="border-t border-border/60 pt-4">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Linha 6000mg</h3>
+                            <Badge variant="outline">opção alternativa</Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground italic mb-3">
+                            Composição mais simples. Indicados quando os produtos da Linha Precision não estiverem disponíveis ou como alternativa de entrada ao tratamento.
+                          </p>
+                        </div>
+                        <div className="space-y-3">{line6000.map(p => renderProductCard(p, { subdued: true }))}</div>
+                      </div>
+                    )}
+                  </>
                 );
-              })}
+              })()}
+
               <p className="text-xs text-muted-foreground italic">⚕ O médico pode escolher qualquer produto — a recomendação é uma sugestão baseada na literatura.</p>
               <div className="flex justify-between">
                 <Button variant="outline" onClick={() => setStep(3)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
@@ -567,7 +620,14 @@ export default function Prescription() {
               <CardDescription>Defina os valores exatos do protocolo de titulação — "start low, go slow"</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Selectors row 1 */}
+              {selectedProduct.requiresTypeAWarning && (
+                <div className="p-3 rounded border-2 border-destructive bg-destructive/10 text-sm space-y-1">
+                  <p className="font-bold text-destructive flex items-center gap-1">
+                    <AlertTriangle className="h-4 w-4" /> RECEITUÁRIO TIPO A — THC 1,4% (100mg/frasco · 0,09mg/gota)
+                  </p>
+                  <p>Indicado exclusivamente para cuidados paliativos em situação clínica irreversível ou terminal. Exige <strong>Notificação de Receita A</strong> (talonário especial). Confirme RDC Anvisa 327/2019.</p>
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
                   <Label>Dose inicial (gotas/tomada)</Label>
@@ -748,6 +808,14 @@ export default function Prescription() {
               <CardDescription>Revise os dados e gere os PDFs. Todos os campos são editáveis.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {selectedProduct.requiresTypeAWarning && (
+                <div className="p-3 rounded border-2 border-destructive bg-destructive/10 text-sm space-y-1">
+                  <p className="font-bold text-destructive flex items-center gap-1">
+                    <AlertTriangle className="h-4 w-4" /> RECEITUÁRIO TIPO A — THC 1,4% (100mg/frasco · 0,09mg/gota)
+                  </p>
+                  <p>Indicado exclusivamente para cuidados paliativos em situação clínica irreversível ou terminal. Exige <strong>Notificação de Receita A</strong> (talonário especial). Confirme RDC Anvisa 327/2019.</p>
+                </div>
+              )}
               <div className="grid gap-4">
                 <div className="p-3 rounded-lg bg-muted">
                   <p className="text-xs text-muted-foreground">Médico</p>

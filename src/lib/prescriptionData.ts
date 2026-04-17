@@ -12,6 +12,7 @@ export interface PathologyInfo {
 
 const PATHOLOGIES_UNSORTED: PathologyInfo[] = [
   { name: "Ansiedade / TEPT", cid10: "F41.1", doseType: "fixo", doseStart: 25, doseTarget: 150, doseMax: 600, recommendedProduct: "HARMONY" },
+  { name: "Câncer / Cuidados paliativos", cid10: "C80", doseType: "fixo", doseStart: 25, doseTarget: 200, doseMax: 600, recommendedProduct: "RELIEF" },
   { name: "Autismo (TEA)", cid10: "F84.0", doseType: "mg_kg", doseStart: 1, doseTarget: 5, doseMax: 10, recommendedProduct: "HARMONY" },
   { name: "Doença de Alzheimer", cid10: "G30", doseType: "fixo", doseStart: 25, doseTarget: 150, doseMax: 300, recommendedProduct: "HARMONY" },
   { name: "Doença de Parkinson", cid10: "G20", doseType: "fixo", doseStart: 25, doseTarget: 150, doseMax: 300, recommendedProduct: "HARMONY" },
@@ -44,24 +45,34 @@ export interface CannabinoidRow {
   effect: string;
 }
 
+export type ProductLine = "PRECISION" | "LINE_6000";
+
 export interface Product {
   name: string;
-  type: string; // "C" or "B"
+  type: string; // "A", "B" or "C"
   typeLabel: string;
-  totalMg: number; // 7237
-  mlPerBottle: number; // 30
-  mgMl: number; // 241
-  dropsPerMl: number; // 20
-  dropsPerBottle: number; // 600
-  cbdPct: number; // fraction, e.g. 0.65
-  cbdMg: number; // total CBD mg in bottle
+  totalMg: number;
+  mlPerBottle: number;
+  mgMl: number;
+  dropsPerMl: number;
+  dropsPerBottle: number;
+  cbdPct: number;
+  cbdMg: number;
   description: string;
-  fullLabel: string; // full commercial name for prescription
-  compositionLabel: string; // composition line for prescription
-  receituarioType: string; // "Receituário tipo C" or "tipo B"
+  fullLabel: string;
+  compositionLabel: string;
+  receituarioType: string;
   clinicalJustification: string;
   cannabinoidJustification: string;
   cannabinoids: CannabinoidRow[];
+  /** Group used in product selection step */
+  productLine: ProductLine;
+  /** For LINE_6000: which Precision product this is a second-choice alternative for. */
+  secondChoiceFor?: string; // "HARMONY" | "RELIEF" etc.
+  /** Restricts product visibility to specific pathologies (by exact name). When set, product is ONLY shown for these pathologies. */
+  restrictToPathologies?: string[];
+  /** Whether to show a red Type A warning banner (controlled substance — palliative care only). */
+  requiresTypeAWarning?: boolean;
 }
 
 function makeCanRow(name: string, pct: number, totalMg: number, effect: string): CannabinoidRow {
@@ -96,6 +107,7 @@ export const PRODUCTS: Product[] = [
       makeCanRow("CBDV", 0.05, 7237, "Antiemético, auxílio em epilepsia"),
       makeCanRow("Terpenos", 0.02, 7237, "Linalol, pineno, nerolidol — efeito entourage"),
     ],
+    productLine: "PRECISION",
   },
   {
     name: "BALANCE",
@@ -124,6 +136,7 @@ export const PRODUCTS: Product[] = [
       makeCanRow("CBDV", 0.05, 7237, "Antiemético"),
       makeCanRow("Terpenos", 0.097, 7237, "Mirceno, limoneno, eucaliptol — efeito entourage"),
     ],
+    productLine: "PRECISION",
   },
   {
     name: "RELIEF",
@@ -153,8 +166,72 @@ export const PRODUCTS: Product[] = [
       makeCanRow("CBL", 0.05, 7237, "Modulador imunológico"),
       makeCanRow("Terpenos", 0.127, 7237, "Mirceno, linalol — efeito entourage"),
     ],
+    productLine: "PRECISION",
+  },
+  // ── LINHA 6000mg — Segunda opção / alternativa de entrada ──
+  {
+    name: "BROAD SPECTRUM 6000",
+    type: "C",
+    typeLabel: "Tipo C (sem THC)",
+    totalMg: 6525,
+    mlPerBottle: 30,
+    mgMl: 200,
+    dropsPerMl: 20,
+    dropsPerBottle: 600,
+    cbdPct: 0.972,
+    cbdMg: 6346,
+    description: "6525 mg/30 mL · 200 mg/mL · 20 gotas/mL · 10,0 mg can./gota",
+    fullLabel: "GREENLION BROAD SPECTRUM 6000MG — Óleo de CBD amplo espectro",
+    compositionLabel: "Concentração: 6525mg / 30ml (200mg/mL) — Sem THC\nComposição: CBD 97,2% (6346mg) · CBG 2,7% (179mg)",
+    receituarioType: "Receituário tipo C — Controle especial",
+    clinicalJustification: "CBD de alta pureza (97,2%) sem THC. Alternativa mais simples ao GREENLION HARMONY 7237MG, indicada quando a Linha Precision não estiver disponível ou como opção de entrada ao tratamento.",
+    cannabinoidJustification: "Formulação concentrada em CBD isolado de alta pureza com pequena fração de CBG, ideal para pacientes que necessitam efeito ansiolítico e neuroprotetor sem complexidade de espectro completo.",
+    cannabinoids: [
+      { name: "CBD", pct: 97.2, mg30ml: 6346, mgMl: +(6346 / 30).toFixed(1), mgDrop: +(6346 / 600).toFixed(2), effect: "Ansiolítico, anticonvulsivante, neuroprotetor" },
+      { name: "CBG", pct: 2.7, mg30ml: 179, mgMl: +(179 / 30).toFixed(1), mgDrop: +(179 / 600).toFixed(2), effect: "Antibacteriano, neuroprotetor" },
+    ],
+    productLine: "LINE_6000",
+    secondChoiceFor: "HARMONY",
+  },
+  {
+    name: "FULL SPECTRUM 6000",
+    type: "A",
+    typeLabel: "Tipo A (Δ9-THC 1,4%)",
+    totalMg: 7109,
+    mlPerBottle: 30,
+    mgMl: 200,
+    dropsPerMl: 20,
+    dropsPerBottle: 600,
+    cbdPct: 0.963,
+    cbdMg: 6846,
+    description: "7109 mg/30 mL · 200 mg/mL · 20 gotas/mL · 10,0 mg can./gota · Δ9-THC 1,4%",
+    fullLabel: "GREENLION FULL SPECTRUM 6000MG — Óleo de CBD espectro completo",
+    compositionLabel: "Concentração: 7109mg / 30ml (200mg/mL) — Δ9-THC 1,4% (100mg/frasco · 0,09mg/gota)\nComposição: CBD 96,3% (6846mg) · Δ9-THC 1,4% (100mg) · CBC 1,9% (133mg) · CBDV 0,4% (29mg)",
+    receituarioType: "Receituário tipo A — Uso exclusivo em cuidados paliativos (Notificação de Receita A)",
+    clinicalJustification: "Δ9-THC 1,4% — Receituário tipo A obrigatório. Indicado exclusivamente para cuidados paliativos em situação clínica irreversível ou terminal (RDC Anvisa 327/2019).",
+    cannabinoidJustification: "Espectro completo com 1,4% de Δ9-THC para potencialização do efeito analgésico, antiemético e orexígeno em cuidados paliativos oncológicos. CBC e CBDV complementam ação anti-inflamatória.",
+    cannabinoids: [
+      { name: "CBD", pct: 96.3, mg30ml: 6846, mgMl: +(6846 / 30).toFixed(1), mgDrop: +(6846 / 600).toFixed(2), effect: "Anti-inflamatório, analgésico, ansiolítico" },
+      { name: "Δ9-THC", pct: 1.4, mg30ml: 100, mgMl: +(100 / 30).toFixed(2), mgDrop: +(100 / 600).toFixed(2), effect: "Analgésico, antiemético, orexígeno (paliativo)" },
+      { name: "CBC", pct: 1.9, mg30ml: 133, mgMl: +(133 / 30).toFixed(1), mgDrop: +(133 / 600).toFixed(2), effect: "Anti-inflamatório, analgésico" },
+      { name: "CBDV", pct: 0.4, mg30ml: 29, mgMl: +(29 / 30).toFixed(2), mgDrop: +(29 / 600).toFixed(2), effect: "Antiemético, anticonvulsivante" },
+    ],
+    productLine: "LINE_6000",
+    restrictToPathologies: ["Câncer / Cuidados paliativos"],
+    requiresTypeAWarning: true,
   },
 ];
+
+// ── Pathology → Product visibility helper ──
+
+/** Returns true if `product` should be visible/selectable for the given pathology. */
+export function isProductAvailableForPathology(product: Product, pathology: PathologyInfo | null): boolean {
+  if (!pathology) return true;
+  if (product.restrictToPathologies && product.restrictToPathologies.length > 0) {
+    return product.restrictToPathologies.includes(pathology.name);
+  }
+  return true;
+}
 
 // ── Dose calculation helpers ──
 
