@@ -571,25 +571,25 @@ export default function Prescription() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
                   <Label>Dose inicial (gotas/tomada)</Label>
-                  <Select value={String(initialDrops)} onValueChange={v => setInitialDrops(Number(v))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {Array.from({ length: 10 }, (_, i) => i + 1).map(d => (
-                        <SelectItem key={d} value={String(d)}>{d} gota{d > 1 ? "s" : ""}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={initialDrops}
+                    onChange={e => setInitialDrops(Math.max(1, Number(e.target.value) || 1))}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Sugerido: 1–10 gotas. Ajuste conforme conduta clínica.</p>
                 </div>
                 <div>
                   <Label>Incremento (gotas/dose)</Label>
-                  <Select value={String(increment)} onValueChange={v => setIncrement(Number(v))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">+1 gota</SelectItem>
-                      <SelectItem value="2">+2 gotas</SelectItem>
-                      <SelectItem value="3">+3 gotas</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={increment}
+                    onChange={e => setIncrement(Math.max(1, Number(e.target.value) || 1))}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Sugerido: +1 a +3 gotas. Personalize se necessário.</p>
                 </div>
                 <div>
                   <Label>Intervalo de ajuste</Label>
