@@ -404,28 +404,34 @@ export function generatePatientGuidePDF({ doctor, patient, prescriptionData: pd,
   doc.setFontSize(8);
   doc.text("O médico vai avaliar sua resposta e decidir o próximo ajuste de dose.", 28, y); y += 8;
 
-  // Also add detailed table
+  // Tabela resumida (paciente): apenas o essencial — dados técnicos ficam na ficha do médico
   y = checkPageBreak(doc, y, 20);
   autoTable(doc, {
     startY: y,
-    head: [["Semana", "Período", "Gotas/dose", "Freq.", "mg can./dose", "mg CBD/dose", "mg CBD/dia", "mg/kg/dia", "Status"]],
+    head: [["Semana", "Período", "Gotas/dose", "Frequência", "Total/dia", "Status"]],
     body: [
       ...guideScheduleSteps.map(s => [
         `Sem. ${s.week}`,
         s.days,
-        s.dropsPerDose,
+        `${s.dropsPerDose} gotas`,
         s.frequency,
-        s.mgCanPerDose,
-        s.mgCbdPerDose,
-        s.mgCbdPerDay,
-        s.mgKgPerDay,
+        `${Number(s.dropsPerDose) * 2} gotas`,
         s.status === "dose_maxima" ? "Dose máxima" : "Titulação",
       ]),
     ],
     theme: "grid",
-    headStyles: { fillColor: [29, 158, 117], fontSize: 7 },
-    styles: { fontSize: 7 },
+    headStyles: { fillColor: [29, 158, 117], fontSize: 8, halign: "center", textColor: 255 },
+    styles: { fontSize: 8, cellPadding: 2, overflow: "linebreak", valign: "middle" },
+    columnStyles: {
+      0: { cellWidth: 18, halign: "center" },
+      1: { cellWidth: 32 },
+      2: { cellWidth: 26, halign: "center" },
+      3: { cellWidth: 38 },
+      4: { cellWidth: 26, halign: "center" },
+      5: { cellWidth: 30, halign: "center" },
+    },
     margin: { left: 20, right: 20 },
+    tableWidth: "auto",
   });
   y = (doc as any).lastAutoTable.finalY + 8;
 
