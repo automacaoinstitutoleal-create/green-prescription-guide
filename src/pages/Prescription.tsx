@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, Check, Download, AlertTriangle, Search } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Download, AlertTriangle, Search, Pencil, Save, X } from "lucide-react";
 import {
   PATHOLOGIES, PRODUCTS,
   getDoseRange, mgDayToDropsDay,
@@ -50,6 +50,54 @@ export default function Prescription() {
 
   // Step 1 - Doctor (editable for this prescription)
   const [editDoctor, setEditDoctor] = useState({ full_name: "", crm: "", specialty: "", phone: "", address: "" });
+
+  // Step 2 - Patient edit mode
+  const [editingPatient, setEditingPatient] = useState(false);
+  const [patientForm, setPatientForm] = useState({
+    full_name: "", cpf: "", rg: "", birth_date: "", weight: "", address: "", clinical_notes: "",
+  });
+  const [savingPatient, setSavingPatient] = useState(false);
+
+  const startEditPatient = () => {
+    if (!patient) return;
+    setPatientForm({
+      full_name: patient.full_name || "",
+      cpf: patient.cpf || "",
+      rg: patient.rg || "",
+      birth_date: patient.birth_date || "",
+      weight: patient.weight ? String(patient.weight) : "",
+      address: patient.address || "",
+      clinical_notes: patient.clinical_notes || "",
+    });
+    setEditingPatient(true);
+  };
+
+  const savePatient = async () => {
+    if (!patient) return;
+    setSavingPatient(true);
+    const { data, error } = await supabase
+      .from("patients")
+      .update({
+        full_name: patientForm.full_name,
+        cpf: patientForm.cpf,
+        rg: patientForm.rg || null,
+        birth_date: patientForm.birth_date || null,
+        weight: patientForm.weight ? parseFloat(patientForm.weight) : null,
+        address: patientForm.address || null,
+        clinical_notes: patientForm.clinical_notes || null,
+      })
+      .eq("id", patient.id)
+      .select()
+      .single();
+    setSavingPatient(false);
+    if (error) {
+      toast.error("Erro ao atualizar paciente: " + error.message);
+    } else {
+      setPatient(data as Patient);
+      setEditingPatient(false);
+      toast.success("Dados do paciente atualizados!");
+    }
+  };
 
   // Step 3 - Pathology
   const [selectedPathology, setSelectedPathology] = useState<PathologyInfo | null>(null);
