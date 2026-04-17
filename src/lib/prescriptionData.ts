@@ -44,24 +44,34 @@ export interface CannabinoidRow {
   effect: string;
 }
 
+export type ProductLine = "PRECISION" | "LINE_6000";
+
 export interface Product {
   name: string;
-  type: string; // "C" or "B"
+  type: string; // "A", "B" or "C"
   typeLabel: string;
-  totalMg: number; // 7237
-  mlPerBottle: number; // 30
-  mgMl: number; // 241
-  dropsPerMl: number; // 20
-  dropsPerBottle: number; // 600
-  cbdPct: number; // fraction, e.g. 0.65
-  cbdMg: number; // total CBD mg in bottle
+  totalMg: number;
+  mlPerBottle: number;
+  mgMl: number;
+  dropsPerMl: number;
+  dropsPerBottle: number;
+  cbdPct: number;
+  cbdMg: number;
   description: string;
-  fullLabel: string; // full commercial name for prescription
-  compositionLabel: string; // composition line for prescription
-  receituarioType: string; // "Receituário tipo C" or "tipo B"
+  fullLabel: string;
+  compositionLabel: string;
+  receituarioType: string;
   clinicalJustification: string;
   cannabinoidJustification: string;
   cannabinoids: CannabinoidRow[];
+  /** Group used in product selection step */
+  productLine: ProductLine;
+  /** For LINE_6000: which Precision product this is a second-choice alternative for. */
+  secondChoiceFor?: string; // "HARMONY" | "RELIEF" etc.
+  /** Restricts product visibility to specific pathologies (by exact name). When set, product is ONLY shown for these pathologies. */
+  restrictToPathologies?: string[];
+  /** Whether to show a red Type A warning banner (controlled substance — palliative care only). */
+  requiresTypeAWarning?: boolean;
 }
 
 function makeCanRow(name: string, pct: number, totalMg: number, effect: string): CannabinoidRow {
