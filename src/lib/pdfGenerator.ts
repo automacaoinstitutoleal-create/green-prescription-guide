@@ -313,15 +313,14 @@ export function generatePatientGuidePDF({ doctor, patient, prescriptionData: pd,
   const finalGuideStep = guideScheduleSteps[guideScheduleSteps.length - 1];
 
   // Margens de segurança
-  const M = 18;                       // margem esquerda/direita
+  const M = 22;                       // margem esquerda/direita reforçada
   const INDENT = 4;                   // recuo para listas
   const CONTENT_W = pw - M * 2;       // largura útil para texto comum
   const INDENT_W = pw - M * 2 - INDENT; // largura útil para texto recuado
-  const LH = 4.2;                     // line height base
 
   let y = 20;
 
-  // Helper: escreve um parágrafo já quebrado, paginando se necessário
+  // Helper: escreve um parágrafo já quebrado, paginando e respeitando maxWidth
   const writePara = (text: string, opts?: { x?: number; width?: number; size?: number; bold?: boolean; gap?: number }) => {
     const x = opts?.x ?? M;
     const width = opts?.width ?? CONTENT_W;
@@ -330,13 +329,19 @@ export function generatePatientGuidePDF({ doctor, patient, prescriptionData: pd,
     const gap = opts?.gap ?? 1;
     doc.setFontSize(size);
     doc.setFont("helvetica", bold ? "bold" : "normal");
-    const lines = doc.splitTextToSize(text ?? "", width);
+
+    const paragraphs = String(text ?? "").split("\n");
     const lineH = size * 0.42;
-    lines.forEach((ln: string) => {
-      y = checkPageBreak(doc, y, lineH + 1);
-      doc.text(ln, x, y);
-      y += lineH;
+
+    paragraphs.forEach((paragraph, index) => {
+      const lines = doc.splitTextToSize(paragraph || " ", Math.max(40, width - 2));
+      const blockHeight = lines.length * lineH;
+      y = checkPageBreak(doc, y, blockHeight + 1);
+      doc.text(lines, x, y, { maxWidth: Math.max(40, width - 2) });
+      y += blockHeight;
+      if (index < paragraphs.length - 1) y += 1.5;
     });
+
     y += gap;
   };
 
@@ -345,8 +350,12 @@ export function generatePatientGuidePDF({ doctor, patient, prescriptionData: pd,
     doc.setFontSize(11);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(0);
-    const lines = doc.splitTextToSize(title, CONTENT_W);
-    lines.forEach((ln: string) => { doc.text(ln, M, y); y += 5; });
+    const lines = doc.splitTextToSize(title, CONTENT_W - 2);
+    const lineH = 4.8;
+    lines.forEach((ln: string) => {
+      doc.text(ln, M, y, { maxWidth: CONTENT_W - 2 });
+      y += lineH;
+    });
     y += 1;
   };
 
