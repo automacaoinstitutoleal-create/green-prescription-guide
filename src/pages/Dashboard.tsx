@@ -9,7 +9,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Leaf, LogOut, Plus, Search, FileText, User, StickyNote } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Leaf, LogOut, Plus, Search, FileText, User, StickyNote, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface Patient {
@@ -120,6 +131,16 @@ export default function Dashboard() {
     navigate("/login");
   };
 
+  const handleDeletePatient = async (patientId: string) => {
+    const { error } = await supabase.from("patients").delete().eq("id", patientId);
+    if (error) {
+      toast.error("Erro ao excluir paciente: " + error.message);
+      return;
+    }
+    toast.success("Paciente excluído com sucesso!");
+    setPatients((prev) => prev.filter((p) => p.id !== patientId));
+  };
+
   const annotationPatient = patients.find(p => p.id === annotationPatientId);
 
   return (
@@ -222,6 +243,34 @@ export default function Dashboard() {
                       <Button variant="ghost" size="sm" onClick={() => navigate(`/pacientes/${patient.id}/historico`)}>
                         Histórico
                       </Button>
+                      <Button variant="ghost" size="sm" onClick={() => navigate(`/pacientes/${patient.id}/editar`)}>
+                        <Pencil className="h-3 w-3 mr-1" /> Editar
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+                            <Trash2 className="h-3 w-3 mr-1" /> Excluir
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Excluir paciente?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Esta ação não pode ser desfeita. Todos os dados, prescrições e anotações de{" "}
+                              <strong>{patient.full_name}</strong> serão removidos permanentemente.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => handleDeletePatient(patient.id)}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              Excluir
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                       <Dialog>
                         <DialogTrigger asChild>
                           <Button variant="ghost" size="sm" onClick={() => loadAnnotations(patient.id)}>
