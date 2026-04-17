@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, Check, Download, AlertTriangle, Search } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Download, AlertTriangle, Search, Pencil, Save, X } from "lucide-react";
 import {
   PATHOLOGIES, PRODUCTS,
   getDoseRange, mgDayToDropsDay,
@@ -50,6 +50,54 @@ export default function Prescription() {
 
   // Step 1 - Doctor (editable for this prescription)
   const [editDoctor, setEditDoctor] = useState({ full_name: "", crm: "", specialty: "", phone: "", address: "" });
+
+  // Step 2 - Patient edit mode
+  const [editingPatient, setEditingPatient] = useState(false);
+  const [patientForm, setPatientForm] = useState({
+    full_name: "", cpf: "", rg: "", birth_date: "", weight: "", address: "", clinical_notes: "",
+  });
+  const [savingPatient, setSavingPatient] = useState(false);
+
+  const startEditPatient = () => {
+    if (!patient) return;
+    setPatientForm({
+      full_name: patient.full_name || "",
+      cpf: patient.cpf || "",
+      rg: patient.rg || "",
+      birth_date: patient.birth_date || "",
+      weight: patient.weight ? String(patient.weight) : "",
+      address: patient.address || "",
+      clinical_notes: patient.clinical_notes || "",
+    });
+    setEditingPatient(true);
+  };
+
+  const savePatient = async () => {
+    if (!patient) return;
+    setSavingPatient(true);
+    const { data, error } = await supabase
+      .from("patients")
+      .update({
+        full_name: patientForm.full_name,
+        cpf: patientForm.cpf,
+        rg: patientForm.rg || null,
+        birth_date: patientForm.birth_date || null,
+        weight: patientForm.weight ? parseFloat(patientForm.weight) : null,
+        address: patientForm.address || null,
+        clinical_notes: patientForm.clinical_notes || null,
+      })
+      .eq("id", patient.id)
+      .select()
+      .single();
+    setSavingPatient(false);
+    if (error) {
+      toast.error("Erro ao atualizar paciente: " + error.message);
+    } else {
+      setPatient(data as Patient);
+      setEditingPatient(false);
+      toast.success("Dados do paciente atualizados!");
+    }
+  };
 
   // Step 3 - Pathology
   const [selectedPathology, setSelectedPathology] = useState<PathologyInfo | null>(null);
@@ -271,49 +319,103 @@ export default function Prescription() {
         {step === 2 && (
           <Card>
             <CardHeader>
-              <CardTitle>2. Paciente</CardTitle>
-              <CardDescription>Dados do paciente selecionado</CardDescription>
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <CardTitle>2. Paciente</CardTitle>
+                  <CardDescription>Dados do paciente selecionado</CardDescription>
+                </div>
+                {!editingPatient && (
+                  <Button variant="outline" size="sm" onClick={startEditPatient}>
+                    <Pencil className="h-4 w-4 mr-1" /> Editar
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="p-3 rounded-lg bg-muted">
-                  <p className="text-xs text-muted-foreground">Nome</p>
-                  <p className="font-medium">{patient.full_name}</p>
-                </div>
-                <div className="p-3 rounded-lg bg-muted">
-                  <p className="text-xs text-muted-foreground">CPF</p>
-                  <p className="font-medium">{patient.cpf}</p>
-                </div>
-                {patient.rg && (
-                  <div className="p-3 rounded-lg bg-muted">
-                    <p className="text-xs text-muted-foreground">RG</p>
-                    <p className="font-medium">{patient.rg}</p>
+              {!editingPatient ? (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="p-3 rounded-lg bg-muted">
+                      <p className="text-xs text-muted-foreground">Nome</p>
+                      <p className="font-medium">{patient.full_name}</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-muted">
+                      <p className="text-xs text-muted-foreground">CPF</p>
+                      <p className="font-medium">{patient.cpf}</p>
+                    </div>
+                    {patient.rg && (
+                      <div className="p-3 rounded-lg bg-muted">
+                        <p className="text-xs text-muted-foreground">RG</p>
+                        <p className="font-medium">{patient.rg}</p>
+                      </div>
+                    )}
+                    {patient.birth_date && (
+                      <div className="p-3 rounded-lg bg-muted">
+                        <p className="text-xs text-muted-foreground">Data de nascimento</p>
+                        <p className="font-medium">{new Date(patient.birth_date).toLocaleDateString("pt-BR")}</p>
+                      </div>
+                    )}
+                    <div className="p-3 rounded-lg bg-primary/10">
+                      <p className="text-xs text-muted-foreground">Peso</p>
+                      <p className="text-xl font-bold text-primary">{patient.weight ? `${patient.weight} kg` : "Não informado"}</p>
+                    </div>
+                    {patient.address && (
+                      <div className="p-3 rounded-lg bg-muted">
+                        <p className="text-xs text-muted-foreground">Endereço</p>
+                        <p className="font-medium">{patient.address}</p>
+                      </div>
+                    )}
                   </div>
-                )}
-                {patient.birth_date && (
-                  <div className="p-3 rounded-lg bg-muted">
-                    <p className="text-xs text-muted-foreground">Data de nascimento</p>
-                    <p className="font-medium">{new Date(patient.birth_date).toLocaleDateString("pt-BR")}</p>
+                  {!patient.weight && (
+                    <p className="text-sm text-destructive flex items-center gap-1"><AlertTriangle className="h-4 w-4" /> Peso não informado. Clique em Editar para informar o peso do paciente.</p>
+                  )}
+                  <div className="flex justify-between">
+                    <Button variant="outline" onClick={() => setStep(1)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
+                    <Button onClick={() => setStep(3)} disabled={!patient.weight}>Próximo <ArrowRight className="h-4 w-4 ml-1" /></Button>
                   </div>
-                )}
-                <div className="p-3 rounded-lg bg-primary/10">
-                  <p className="text-xs text-muted-foreground">Peso</p>
-                  <p className="text-xl font-bold text-primary">{patient.weight ? `${patient.weight} kg` : "Não informado"}</p>
-                </div>
-                {patient.address && (
-                  <div className="p-3 rounded-lg bg-muted">
-                    <p className="text-xs text-muted-foreground">Endereço</p>
-                    <p className="font-medium">{patient.address}</p>
+                </>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor="p_full_name">Nome completo *</Label>
+                      <Input id="p_full_name" value={patientForm.full_name} onChange={(e) => setPatientForm({ ...patientForm, full_name: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="p_cpf">CPF *</Label>
+                      <Input id="p_cpf" value={patientForm.cpf} onChange={(e) => setPatientForm({ ...patientForm, cpf: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="p_rg">RG</Label>
+                      <Input id="p_rg" value={patientForm.rg} onChange={(e) => setPatientForm({ ...patientForm, rg: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="p_birth">Data de nascimento</Label>
+                      <Input id="p_birth" type="date" value={patientForm.birth_date} onChange={(e) => setPatientForm({ ...patientForm, birth_date: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="p_weight">Peso (kg) *</Label>
+                      <Input id="p_weight" type="number" step="0.1" value={patientForm.weight} onChange={(e) => setPatientForm({ ...patientForm, weight: e.target.value })} />
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor="p_address">Endereço</Label>
+                      <Input id="p_address" value={patientForm.address} onChange={(e) => setPatientForm({ ...patientForm, address: e.target.value })} />
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor="p_notes">Observações clínicas</Label>
+                      <Input id="p_notes" value={patientForm.clinical_notes} onChange={(e) => setPatientForm({ ...patientForm, clinical_notes: e.target.value })} />
+                    </div>
                   </div>
-                )}
-              </div>
-              {!patient.weight && (
-                <p className="text-sm text-destructive flex items-center gap-1"><AlertTriangle className="h-4 w-4" /> Peso não informado. Cadastre o peso do paciente para cálculo preciso de doses.</p>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setEditingPatient(false)} disabled={savingPatient}>
+                      <X className="h-4 w-4 mr-1" /> Cancelar
+                    </Button>
+                    <Button onClick={savePatient} disabled={savingPatient || !patientForm.full_name || !patientForm.cpf}>
+                      <Save className="h-4 w-4 mr-1" /> {savingPatient ? "Salvando..." : "Salvar alterações"}
+                    </Button>
+                  </div>
+                </>
               )}
-              <div className="flex justify-between">
-                <Button variant="outline" onClick={() => setStep(1)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
-                <Button onClick={() => setStep(3)} disabled={!patient.weight}>Próximo <ArrowRight className="h-4 w-4 ml-1" /></Button>
-              </div>
             </CardContent>
           </Card>
         )}
