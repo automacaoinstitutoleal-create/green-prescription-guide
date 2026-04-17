@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,10 @@ import { ArrowLeft } from "lucide-react";
 export default function NewPatient() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { patientId } = useParams();
+  const isEdit = Boolean(patientId);
   const [loading, setLoading] = useState(false);
+  const [loadingData, setLoadingData] = useState(isEdit);
   const [form, setForm] = useState({
     full_name: "",
     cpf: "",
@@ -24,6 +27,32 @@ export default function NewPatient() {
     clinical_notes: "",
   });
 
+  useEffect(() => {
+    if (!isEdit || !user) return;
+    (async () => {
+      const { data, error } = await supabase
+        .from("patients")
+        .select("*")
+        .eq("id", patientId)
+        .single();
+      if (error || !data) {
+        toast.error("Paciente não encontrado");
+        navigate("/");
+        return;
+      }
+      setForm({
+        full_name: data.full_name ?? "",
+        cpf: data.cpf ?? "",
+        rg: data.rg ?? "",
+        birth_date: data.birth_date ?? "",
+        weight: data.weight != null ? String(data.weight) : "",
+        address: data.address ?? "",
+        clinical_notes: data.clinical_notes ?? "",
+      });
+      setLoadingData(false);
+    })();
+  }, [isEdit, patientId, user, navigate]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
@@ -33,8 +62,7 @@ export default function NewPatient() {
     if (!user) return;
     setLoading(true);
 
-    const { error } = await supabase.from("patients").insert({
-      doctor_id: user.id,
+    const payload = {
       full_name: form.full_name,
       cpf: form.cpf,
       rg: form.rg || null,
@@ -42,16 +70,28 @@ export default function NewPatient() {
       weight: form.weight ? parseFloat(form.weight) : null,
       address: form.address || null,
       clinical_notes: form.clinical_notes || null,
-    });
+    };
+
+    const { error } = isEdit
+      ? await supabase.from("patients").update(payload).eq("id", patientId!)
+      : await supabase.from("patients").insert({ doctor_id: user.id, ...payload });
 
     setLoading(false);
     if (error) {
-      toast.error("Erro ao cadastrar paciente: " + error.message);
+      toast.error((isEdit ? "Erro ao atualizar paciente: " : "Erro ao cadastrar paciente: ") + error.message);
     } else {
-      toast.success("Paciente cadastrado com sucesso!");
+      toast.success(isEdit ? "Paciente atualizado com sucesso!" : "Paciente cadastrado com sucesso!");
       navigate("/");
     }
   };
+
+  if (loadingData) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-secondary/20 p-4">
@@ -62,7 +102,7 @@ export default function NewPatient() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Cadastrar Paciente</CardTitle>
+            <CardTitle>{isEdit ? "Editar Paciente" : "Cadastrar Paciente"}</CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -101,7 +141,7 @@ export default function NewPatient() {
               <div className="flex justify-end gap-2">
                 <Button variant="outline" type="button" onClick={() => navigate("/")}>Cancelar</Button>
                 <Button type="submit" disabled={loading}>
-                  {loading ? "Salvando..." : "Cadastrar"}
+                  {loading ? "Salvando..." : isEdit ? "Salvar alterações" : "Cadastrar"}
                 </Button>
               </div>
             </form>
