@@ -359,25 +359,37 @@ export function generatePatientGuidePDF({ doctor, patient, prescriptionData: pd,
     y += 1;
   };
 
-  // ── Cabeçalho verde ──
-  doc.setFillColor(29, 158, 117);
-  doc.rect(0, 0, pw, 45, "F");
-  doc.setFontSize(15);
-  doc.setTextColor(255);
-  doc.text("Guia de Uso — Greenlion Precision", pw / 2, 14, { align: "center" });
+  // ── Cabeçalho minimalista (sem faixa colorida) ──
+  const M_TOP = 18;
+  doc.setTextColor(29, 78, 60);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.text("Guia de Uso — Greenlion Precision", pw / 2, M_TOP, { align: "center" });
+
+  doc.setTextColor(90);
+  doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
-  const headPatient = doc.splitTextToSize(`Paciente: ${patient.full_name} · ${patient.weight ?? "N/I"}kg`, pw - 20);
-  doc.text(headPatient[0], pw / 2, 21, { align: "center" });
-  const headProduct = doc.splitTextToSize(`Produto: ${pd.productFullLabel}`, pw - 20);
-  doc.text(headProduct[0], pw / 2, 27, { align: "center" });
+  const headPatient = doc.splitTextToSize(`Paciente: ${patient.full_name} · ${patient.weight ?? "N/I"}kg`, pw - 40);
+  doc.text(headPatient[0], pw / 2, M_TOP + 6, { align: "center" });
+
+  const headProduct = doc.splitTextToSize(`Produto: ${pd.productFullLabel}`, pw - 40);
+  doc.text(headProduct[0], pw / 2, M_TOP + 11, { align: "center" });
+
   doc.setFontSize(8);
+  doc.setTextColor(120);
   const headDoc = doc.splitTextToSize(
     `Médico: Dr(a). ${doctor.full_name} · CRM ${doctor.crm}${doctor.phone ? ` · Tel: ${doctor.phone}` : ""}`,
-    pw - 20,
+    pw - 40,
   );
-  doc.text(headDoc[0], pw / 2, 34, { align: "center" });
-  doc.text(`Data: ${new Date().toLocaleDateString("pt-BR")}`, pw / 2, 40, { align: "center" });
-  y = 55;
+  doc.text(headDoc[0], pw / 2, M_TOP + 16, { align: "center" });
+  doc.text(`Data: ${new Date().toLocaleDateString("pt-BR")}`, pw / 2, M_TOP + 21, { align: "center" });
+
+  // Linha divisória sutil
+  doc.setDrawColor(29, 158, 117);
+  doc.setLineWidth(0.3);
+  doc.line(M, M_TOP + 25, pw - M, M_TOP + 25);
+
+  y = M_TOP + 32;
   doc.setTextColor(0);
 
   // ── Section 1: Por que ──
