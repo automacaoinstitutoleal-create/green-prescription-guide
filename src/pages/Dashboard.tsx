@@ -20,7 +20,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Leaf, LogOut, Plus, Search, FileText, User, StickyNote, Pencil, Trash2 } from "lucide-react";
+import { Leaf, LogOut, Plus, Search, FileText, User, StickyNote, Pencil, Trash2, BookOpen } from "lucide-react";
 import { toast } from "sonner";
 
 interface Patient {
@@ -162,6 +162,9 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => navigate("/biblioteca")}>
+              <BookOpen className="h-4 w-4 mr-1" /> Biblioteca científica
+            </Button>
             <Button variant="ghost" size="sm" onClick={() => navigate("/perfil")}>
               <User className="h-4 w-4 mr-1" /> Perfil
             </Button>

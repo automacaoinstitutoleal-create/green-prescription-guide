@@ -19,6 +19,7 @@ import {
   type PathologyInfo, type Product, type TitulationStep, type TitulationConfig,
 } from "@/lib/prescriptionData";
 import { generatePrescriptionPDF, generatePatientGuidePDF } from "@/lib/pdfGenerator";
+import { ScientificReferencesCard } from "@/components/ScientificReferencesCard";
 
 interface Patient {
   id: string;
@@ -466,6 +467,11 @@ export default function Prescription() {
                 })}
               </div>
               <p className="text-xs text-muted-foreground italic">⚕ Todos os valores são sugestões baseadas na literatura. O médico é soberano na decisão terapêutica.</p>
+
+              {selectedPathology && (
+                <ScientificReferencesCard pathologyName={selectedPathology.name} />
+              )}
+
               <div className="flex justify-between">
                 <Button variant="outline" onClick={() => setStep(2)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
                 <Button onClick={() => setStep(4)} disabled={!selectedPathology}>Próximo <ArrowRight className="h-4 w-4 ml-1" /></Button>
