@@ -6,39 +6,123 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+// In-memory rate limiter (per-instance). Tracks failed password attempts per IP.
+const FAILED_ATTEMPTS = new Map<string, { count: number; firstAt: number; blockedUntil: number }>();
+const WINDOW_MS = 60_000; // 1 minute
+const MAX_FAILS = 5;
+const BLOCK_MS = 5 * 60_000; // 5 minutes block after exceeding
+
+function getClientIp(req: Request): string {
+  const fwd = req.headers.get("x-forwarded-for");
+  if (fwd) return fwd.split(",")[0].trim();
+  return req.headers.get("cf-connecting-ip") || req.headers.get("x-real-ip") || "unknown";
+}
+
+function checkRateLimit(ip: string): { allowed: boolean; retryAfter?: number } {
+  const now = Date.now();
+  const entry = FAILED_ATTEMPTS.get(ip);
+  if (!entry) return { allowed: true };
+  if (entry.blockedUntil && entry.blockedUntil > now) {
+    return { allowed: false, retryAfter: Math.ceil((entry.blockedUntil - now) / 1000) };
+  }
+  if (now - entry.firstAt > WINDOW_MS) {
+    FAILED_ATTEMPTS.delete(ip);
+    return { allowed: true };
+  }
+  return { allowed: true };
+}
+
+function recordFailure(ip: string) {
+  const now = Date.now();
+  const entry = FAILED_ATTEMPTS.get(ip);
+  if (!entry || now - entry.firstAt > WINDOW_MS) {
+    FAILED_ATTEMPTS.set(ip, { count: 1, firstAt: now, blockedUntil: 0 });
+    return;
+  }
+  entry.count += 1;
+  if (entry.count >= MAX_FAILS) {
+    entry.blockedUntil = now + BLOCK_MS;
+  }
+  FAILED_ATTEMPTS.set(ip, entry);
+}
+
+function recordSuccess(ip: string) {
+  FAILED_ATTEMPTS.delete(ip);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  try {
-    const { action, password, filters, targetId, targetType } = await req.json();
+  const ip = getClientIp(req);
 
-    const adminPassword = Deno.env.get("ADMIN_PANEL_PASSWORD");
-    if (!adminPassword || password !== adminPassword) {
-      return new Response(JSON.stringify({ error: "Senha inválida" }), {
+  try {
+    // Require an authenticated Supabase user (defense in depth on top of admin password)
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Não autorizado" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const userClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: userData, error: userErr } = await userClient.auth.getUser();
+    if (userErr || !userData?.user) {
+      return new Response(JSON.stringify({ error: "Não autorizado" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Rate-limit check before processing password
+    const rl = checkRateLimit(ip);
+    if (!rl.allowed) {
+      return new Response(
+        JSON.stringify({ error: "Muitas tentativas. Tente novamente mais tarde." }),
+        {
+          status: 429,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+            "Retry-After": String(rl.retryAfter ?? 300),
+          },
+        }
+      );
+    }
+
+    const { action, password, filters, targetId, targetType } = await req.json();
+
+    const adminPassword = Deno.env.get("ADMIN_PANEL_PASSWORD");
+    if (!adminPassword || password !== adminPassword) {
+      recordFailure(ip);
+      console.warn("admin-panel: failed auth attempt", { ip, user: userData.user.id });
+      return new Response(JSON.stringify({ error: "Senha inválida" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    recordSuccess(ip);
+
     const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
+      supabaseUrl,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
     if (action === "getData") {
-      // Fetch all doctors
       const { data: doctors } = await supabaseAdmin
         .from("doctor_profiles")
         .select("*");
 
-      // Fetch all patients
       const { data: patients } = await supabaseAdmin
         .from("patients")
         .select("*");
 
-      // Fetch prescriptions with optional date filter
       let prescriptionsQuery = supabaseAdmin
         .from("prescriptions")
         .select("*");
@@ -60,7 +144,6 @@ Deno.serve(async (req) => {
 
     if (action === "delete") {
       if (targetType === "doctor") {
-        // Delete doctor's prescriptions, annotations, patients, then profile
         const { data: doc } = await supabaseAdmin
           .from("doctor_profiles")
           .select("user_id")
@@ -72,7 +155,6 @@ Deno.serve(async (req) => {
           await supabaseAdmin.from("annotations").delete().eq("doctor_id", doc.user_id);
           await supabaseAdmin.from("patients").delete().eq("doctor_id", doc.user_id);
           await supabaseAdmin.from("doctor_profiles").delete().eq("id", targetId);
-          // Delete auth user
           await supabaseAdmin.auth.admin.deleteUser(doc.user_id);
         }
 
@@ -97,7 +179,8 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
+    console.error("admin-panel error:", err);
+    return new Response(JSON.stringify({ error: "Erro interno do servidor" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
