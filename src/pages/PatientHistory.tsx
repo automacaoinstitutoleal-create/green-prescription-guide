@@ -111,7 +111,7 @@ export default function PatientHistory() {
                     <TableHead>Produto</TableHead>
                     <TableHead>Dose (mg/dia)</TableHead>
                     <TableHead>Guia de Prescrição</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
+                    <TableHead className="text-right">Receita Médica</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
