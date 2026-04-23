@@ -783,7 +783,7 @@ export default function Prescription() {
                   </Table>
                 </div>
                 <div className="flex items-center gap-4">
-                  <p className="text-sm">{totalDrops30} gotas ÷ 600 gotas/frasco = <strong>{Math.ceil(totalDrops30 / 600)}</strong> frasco(s)</p>
+                  <p className="text-sm">{totalDrops30} gotas ÷ {selectedProduct.dropsPerBottle} gotas/frasco = <strong>{Math.ceil(totalDrops30 / selectedProduct.dropsPerBottle)}</strong> frasco(s)</p>
                   <div className="flex items-center gap-2">
                     <Label>Frascos (editável):</Label>
                     <Input type="number" min={1} className="w-20" value={editableBottles} onChange={e => setEditableBottles(Number(e.target.value))} />
