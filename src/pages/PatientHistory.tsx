@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowLeft, FileText, Download } from "lucide-react";
-import { generatePrescriptionPDF } from "@/lib/pdfGenerator";
+import { generatePrescriptionPDF, generatePatientGuidePDF } from "@/lib/pdfGenerator";
+import { PRODUCTS } from "@/lib/prescriptionData";
 
 interface PrescriptionRow {
   id: string;
