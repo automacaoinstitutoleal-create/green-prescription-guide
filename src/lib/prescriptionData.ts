@@ -77,7 +77,7 @@ export interface Product {
 
 function makeCanRow(name: string, pct: number, totalMg: number, effect: string): CannabinoidRow {
   const mg30ml = Math.round(totalMg * pct);
-  return { name, pct: pct * 100, mg30ml, mgMl: +(mg30ml / 30).toFixed(1), mgDrop: +(mg30ml / 600).toFixed(2), effect };
+  return { name, pct: pct * 100, mg30ml, mgMl: +(mg30ml / 30).toFixed(1), mgDrop: +(mg30ml / 1200).toFixed(3), effect };
 }
 
 export const PRODUCTS: Product[] = [
