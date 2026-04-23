@@ -64,6 +64,19 @@ export default function PatientHistory() {
     });
   };
 
+  const handleDownloadGuide = (presc: PrescriptionRow) => {
+    if (!patient || !doctor) return;
+    const pd = presc.prescription_data as any;
+    const product = PRODUCTS.find((p) => p.name === presc.product);
+    if (!product) return;
+    generatePatientGuidePDF({
+      doctor,
+      patient,
+      prescriptionData: pd,
+      product,
+    });
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
