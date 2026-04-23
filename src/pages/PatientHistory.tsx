@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowLeft, FileText, Download } from "lucide-react";
-import { generatePrescriptionPDF } from "@/lib/pdfGenerator";
+import { generatePrescriptionPDF, generatePatientGuidePDF } from "@/lib/pdfGenerator";
+import { PRODUCTS } from "@/lib/prescriptionData";
 
 interface PrescriptionRow {
   id: string;
@@ -63,6 +64,19 @@ export default function PatientHistory() {
     });
   };
 
+  const handleDownloadGuide = (presc: PrescriptionRow) => {
+    if (!patient || !doctor) return;
+    const pd = presc.prescription_data as any;
+    const product = PRODUCTS.find((p) => p.name === presc.product);
+    if (!product) return;
+    generatePatientGuidePDF({
+      doctor,
+      patient,
+      prescriptionData: pd,
+      product,
+    });
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -96,7 +110,7 @@ export default function PatientHistory() {
                     <TableHead>Patologia</TableHead>
                     <TableHead>Produto</TableHead>
                     <TableHead>Dose (mg/dia)</TableHead>
-                    <TableHead>TCLE</TableHead>
+                    <TableHead>Guia de Prescrição</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -107,7 +121,11 @@ export default function PatientHistory() {
                       <TableCell>{p.pathology}</TableCell>
                       <TableCell>{p.product}</TableCell>
                       <TableCell>{p.calculated_dose ?? "—"}</TableCell>
-                      <TableCell>{p.tcle_accepted ? "✓ Sim" : "✗ Não"}</TableCell>
+                      <TableCell>
+                        <Button variant="outline" size="sm" onClick={() => handleDownloadGuide(p)}>
+                          <Download className="h-3 w-3 mr-1" /> Guia PDF
+                        </Button>
+                      </TableCell>
                       <TableCell className="text-right">
                         <Button variant="outline" size="sm" onClick={() => handleRedownload(p)}>
                           <Download className="h-3 w-3 mr-1" /> PDF
