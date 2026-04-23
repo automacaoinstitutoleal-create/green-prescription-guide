@@ -58,29 +58,7 @@ Deno.serve(async (req) => {
   const ip = getClientIp(req);
 
   try {
-    // Require an authenticated Supabase user (defense in depth on top of admin password)
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Não autorizado" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: userData, error: userErr } = await userClient.auth.getUser();
-    if (userErr || !userData?.user) {
-      return new Response(JSON.stringify({ error: "Não autorizado" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Rate-limit check before processing password
+    // Rate-limit check before processing password (no user auth required - password is the only gate)
     const rl = checkRateLimit(ip);
     if (!rl.allowed) {
       return new Response(
@@ -101,7 +79,7 @@ Deno.serve(async (req) => {
     const adminPassword = Deno.env.get("ADMIN_PANEL_PASSWORD");
     if (!adminPassword || password !== adminPassword) {
       recordFailure(ip);
-      console.warn("admin-panel: failed auth attempt", { ip, user: userData.user.id });
+      console.warn("admin-panel: failed auth attempt", { ip });
       return new Response(JSON.stringify({ error: "Senha inválida" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -109,6 +87,7 @@ Deno.serve(async (req) => {
     }
     recordSuccess(ip);
 
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAdmin = createClient(
       supabaseUrl,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
