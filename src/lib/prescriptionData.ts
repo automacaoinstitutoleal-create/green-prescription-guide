@@ -49,7 +49,7 @@ export type ProductLine = "PRECISION" | "LINE_6000";
 
 export interface Product {
   name: string;
-  type: string; // "A", "B" or "C"
+  type: "BRANCA";
   typeLabel: string;
   totalMg: number;
   mlPerBottle: number;
@@ -71,8 +71,6 @@ export interface Product {
   secondChoiceFor?: string; // "HARMONY" | "RELIEF" etc.
   /** Restricts product visibility to specific pathologies (by exact name). When set, product is ONLY shown for these pathologies. */
   restrictToPathologies?: string[];
-  /** Whether to show a red Type A warning banner (controlled substance — palliative care only). */
-  requiresTypeAWarning?: boolean;
 }
 
 function makeCanRow(name: string, pct: number, totalMg: number, effect: string): CannabinoidRow {
@@ -83,8 +81,8 @@ function makeCanRow(name: string, pct: number, totalMg: number, effect: string):
 export const PRODUCTS: Product[] = [
   {
     name: "HARMONY",
-    type: "C",
-    typeLabel: "Tipo C (sem THC)",
+    type: "BRANCA",
+    typeLabel: "Receita branca comum",
     totalMg: 7237,
     mlPerBottle: 30,
     mgMl: 241,
@@ -95,7 +93,7 @@ export const PRODUCTS: Product[] = [
     description: "7237 mg/30 mL · 241 mg/mL · 40 gotas/mL",
     fullLabel: "GREENLION HARMONY 7237MG — Óleo de canabinoides de amplo espectro",
     compositionLabel: "Concentração: 7237mg / 30ml (241mg/mL) — Sem THC\nComposição: CBD 65% (4704mg) · CBG-A 10% · CBD-A 10% · CBN 4% · CBC 4% · CBDV 5% · Terpenos 2%",
-    receituarioType: "Receituário tipo C — Controle especial",
+    receituarioType: "Receita branca comum",
     clinicalJustification: "Formulação livre de THC, indicada para pacientes que necessitam de efeito ansiolítico e neuroprotetor sem componentes psicoativos.",
     cannabinoidJustification: "Alto teor de CBD (65%) com CBG-A e CBD-A como precursores que potencializam o efeito entourage. CBN auxilia no sono e CBC contribui com efeito anti-inflamatório.",
     cannabinoids: [
@@ -111,8 +109,8 @@ export const PRODUCTS: Product[] = [
   },
   {
     name: "BALANCE",
-    type: "B",
-    typeLabel: "Tipo B (Δ8-THC ≤0,2%)",
+    type: "BRANCA",
+    typeLabel: "Receita branca comum",
     totalMg: 7237,
     mlPerBottle: 30,
     mgMl: 241,
@@ -123,7 +121,7 @@ export const PRODUCTS: Product[] = [
     description: "7237 mg/30 mL · 241 mg/mL · 40 gotas/mL",
     fullLabel: "GREENLION BALANCE 7237MG — Óleo de canabinoides de amplo espectro",
     compositionLabel: "Concentração: 7237mg / 30ml (241mg/mL) — Δ8-THC ≤ 0,2%\nComposição: CBD 60% (4342mg) · CBG-A 10% · CBN 6% · CBC-A 9% · CBDV 5% · Terpenos 9,7%",
-    receituarioType: "Receituário tipo B — Controle especial",
+    receituarioType: "Receita branca comum",
     clinicalJustification: "Formulação balanceada com traços de Δ8-THC, indicada para insônia, doenças autoimunes e condições onde o efeito entourage completo é desejável.",
     cannabinoidJustification: "CBD 60% como base com micro-doses de Δ8-THC (0,2%) que potencializam o efeito analgésico sem psicoatividade significativa. Alto teor de terpenos (9,7%) maximiza o efeito entourage.",
     cannabinoids: [
@@ -140,8 +138,8 @@ export const PRODUCTS: Product[] = [
   },
   {
     name: "RELIEF",
-    type: "B",
-    typeLabel: "Tipo B (Δ9-THC ≤0,2%)",
+    type: "BRANCA",
+    typeLabel: "Receita branca comum",
     totalMg: 7237,
     mlPerBottle: 30,
     mgMl: 241,
@@ -152,7 +150,7 @@ export const PRODUCTS: Product[] = [
     description: "7237 mg/30 mL · 241 mg/mL · 40 gotas/mL",
     fullLabel: "GREENLION RELIEF 7237MG — Óleo de canabinoides de amplo espectro",
     compositionLabel: "Concentração: 7237mg / 30ml (241mg/mL) — Δ9-THC ≤ 0,2%\nComposição: CBD 58% (4198mg) · CBG 10% · CBN 6% · CBC 8% · CBL 5% · Terpenos 12,7%",
-    receituarioType: "Receituário tipo B — Controle especial",
+    receituarioType: "Receita branca comum",
     clinicalJustification: "Formulação para dor e inflamação com traços de Δ9-THC, indicada para dor crônica, fibromialgia, câncer e esclerose múltipla.",
     cannabinoidJustification: "CBD 58% combinado com micro-doses de Δ9-THC (0,2%) e alto teor de CBG (10%) e CBC (8%) para potente efeito anti-inflamatório e analgésico. Terpenos 12,7% maximizam a biodisponibilidade.",
     cannabinoids: [
@@ -171,8 +169,8 @@ export const PRODUCTS: Product[] = [
   // ── LINHA 6000mg — Segunda opção / alternativa de entrada ──
   {
     name: "BROAD SPECTRUM 6000",
-    type: "C",
-    typeLabel: "Tipo C (sem THC)",
+    type: "BRANCA",
+    typeLabel: "Receita branca comum",
     totalMg: 6525,
     mlPerBottle: 30,
     mgMl: 200,
@@ -183,7 +181,7 @@ export const PRODUCTS: Product[] = [
     description: "6525 mg/30 mL · 200 mg/mL · 40 gotas/mL · 5,0 mg can./gota",
     fullLabel: "GREENLION BROAD SPECTRUM 6000MG — Óleo de CBD amplo espectro",
     compositionLabel: "Concentração: 6525mg / 30ml (200mg/mL) — Sem THC\nComposição: CBD 97,2% (6346mg) · CBG 2,7% (179mg)",
-    receituarioType: "Receituário tipo C — Controle especial",
+    receituarioType: "Receita branca comum",
     clinicalJustification: "CBD de alta pureza (97,2%) sem THC. Alternativa mais simples ao GREENLION HARMONY 7237MG, indicada quando a Linha Precision não estiver disponível ou como opção de entrada ao tratamento.",
     cannabinoidJustification: "Formulação concentrada em CBD isolado de alta pureza com pequena fração de CBG, ideal para pacientes que necessitam efeito ansiolítico e neuroprotetor sem complexidade de espectro completo.",
     cannabinoids: [
@@ -195,8 +193,8 @@ export const PRODUCTS: Product[] = [
   },
   {
     name: "FULL SPECTRUM 6000",
-    type: "A",
-    typeLabel: "Tipo A (Δ9-THC 1,4%)",
+    type: "BRANCA",
+    typeLabel: "Receita branca comum",
     totalMg: 7109,
     mlPerBottle: 30,
     mgMl: 200,
@@ -207,8 +205,8 @@ export const PRODUCTS: Product[] = [
     description: "7109 mg/30 mL · 200 mg/mL · 40 gotas/mL · 5,0 mg can./gota · Δ9-THC 1,4%",
     fullLabel: "GREENLION FULL SPECTRUM 6000MG — Óleo de CBD espectro completo",
     compositionLabel: "Concentração: 7109mg / 30ml (200mg/mL) — Δ9-THC 1,4% (100mg/frasco · 0,08mg/gota)\nComposição: CBD 96,3% (6846mg) · Δ9-THC 1,4% (100mg) · CBC 1,9% (133mg) · CBDV 0,4% (29mg)",
-    receituarioType: "Receituário tipo A — Uso exclusivo em cuidados paliativos (Notificação de Receita A)",
-    clinicalJustification: "Δ9-THC 1,4% — Receituário tipo A obrigatório. Indicado exclusivamente para cuidados paliativos em situação clínica irreversível ou terminal (RDC Anvisa 327/2019).",
+    receituarioType: "Receita branca comum",
+    clinicalJustification: "Δ9-THC 1,4%. Indicado para cuidados paliativos em situação clínica irreversível ou terminal, conforme avaliação clínica do prescritor.",
     cannabinoidJustification: "Espectro completo com 1,4% de Δ9-THC para potencialização do efeito analgésico, antiemético e orexígeno em cuidados paliativos oncológicos. CBC e CBDV complementam ação anti-inflamatória.",
     cannabinoids: [
       { name: "CBD", pct: 96.3, mg30ml: 6846, mgMl: +(6846 / 30).toFixed(1), mgDrop: +(6846 / 1200).toFixed(3), effect: "Anti-inflamatório, analgésico, ansiolítico" },
@@ -218,7 +216,6 @@ export const PRODUCTS: Product[] = [
     ],
     productLine: "LINE_6000",
     restrictToPathologies: ["Câncer / Cuidados paliativos"],
-    requiresTypeAWarning: true,
   },
 ];
 

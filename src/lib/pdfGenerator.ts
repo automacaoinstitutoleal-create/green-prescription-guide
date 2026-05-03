@@ -545,7 +545,7 @@ Autorizo o início do tratamento conforme prescrição médica.
 
 Declaro ciência de que o produto não é isento de riscos e não substitui tratamentos convencionais já indicados.
 
-Produto de uso sob controle especial — manter fora do alcance de crianças.`;
+Manter fora do alcance de crianças.`;
   tcle.split("\n\n").forEach(par => writePara(par, { size: 8, gap: 2 }));
   y += 4;
 
