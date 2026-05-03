@@ -1,29 +1,81 @@
 import { useState } from "react";
-import { ChevronDown, ChevronUp, BookOpen, ExternalLink } from "lucide-react";
+import { ChevronDown, ChevronUp, BookOpen, ExternalLink, Star, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getReferencesForPathology, pubmedUrlForDoi, type ScientificReference } from "@/lib/scientificReferences";
+import { Badge } from "@/components/ui/badge";
+import {
+  getReferencesForPathology,
+  externalUrlForRef,
+  doiOrgUrl,
+  type ScientificReference,
+} from "@/lib/scientificReferences";
+import { useFavoriteReferences } from "@/hooks/useFavoriteReferences";
 
 interface Props {
   pathologyName: string;
 }
 
-function RefRow({ r }: { r: ScientificReference }) {
+function RefRow({
+  r,
+  pathology,
+  isFavorite,
+  onToggleFavorite,
+}: {
+  r: ScientificReference;
+  pathology: string;
+  isFavorite: boolean;
+  onToggleFavorite: () => void;
+}) {
   return (
     <div className="py-2 border-b last:border-b-0 border-border/50">
-      <p className="text-sm font-medium leading-snug">{r.authors}</p>
-      <p className="text-sm text-foreground/90 leading-snug">"{r.title}"</p>
-      <p className="text-xs text-muted-foreground mt-0.5">
-        {r.journal} · {r.year}
-      </p>
-      <p className="text-xs text-muted-foreground italic mt-0.5">{r.doseInfo}</p>
-      <a
-        href={pubmedUrlForDoi(r.doi)}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 hover:underline mt-1"
-      >
-        doi:{r.doi} <ExternalLink className="h-3 w-3" />
-      </a>
+      <div className="flex items-start gap-2">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium leading-snug">{r.authors}</p>
+          <p className="text-sm text-foreground/90 leading-snug">"{r.title}"</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {r.journal} · {r.year}
+          </p>
+          <p className="text-xs text-muted-foreground italic mt-0.5">{r.doseInfo}</p>
+          {r.tags && r.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1">
+              {r.tags.slice(0, 4).map((tag) => (
+                <Badge key={tag} variant="secondary" className="text-[10px] py-0 px-1.5 h-4">
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-3 mt-1">
+            <a
+              href={externalUrlForRef(r)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
+            >
+              <ExternalLink className="h-3 w-3" /> PubMed
+            </a>
+            {!r.doi.startsWith("FDA-") && (
+              <a
+                href={doiOrgUrl(r.doi)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-emerald-700 hover:text-emerald-900 hover:underline"
+              >
+                <FileText className="h-3 w-3" /> Artigo (DOI)
+              </a>
+            )}
+          </div>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 shrink-0"
+          onClick={onToggleFavorite}
+          title={isFavorite ? "Remover dos favoritos" : "Favoritar"}
+        >
+          <Star className={`h-4 w-4 ${isFavorite ? "fill-amber-400 text-amber-500" : "text-muted-foreground"}`} />
+        </Button>
+      </div>
     </div>
   );
 }
@@ -31,6 +83,7 @@ function RefRow({ r }: { r: ScientificReference }) {
 export function ScientificReferencesCard({ pathologyName }: Props) {
   const [open, setOpen] = useState(false);
   const { doseReference, specific, general, total } = getReferencesForPathology(pathologyName);
+  const { isFavorite, toggle } = useFavoriteReferences();
 
   if (total === 0) return null;
 
@@ -67,17 +120,29 @@ export function ScientificReferencesCard({ pathologyName }: Props) {
               </p>
               <div>
                 {specific.map((r) => (
-                  <RefRow key={r.doi + r.title} r={r} />
+                  <RefRow
+                    key={r.doi + r.title}
+                    r={r}
+                    pathology={pathologyName}
+                    isFavorite={isFavorite(r.doi)}
+                    onToggleFavorite={() => toggle({ doi: r.doi, title: r.title, pathology: pathologyName })}
+                  />
                 ))}
               </div>
             </>
           )}
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mt-3 mb-1">
-            Referências gerais
+            Referências gerais (efeito entourage, dose-resposta, full spectrum)
           </p>
           <div>
             {general.map((r) => (
-              <RefRow key={r.doi + r.title} r={r} />
+              <RefRow
+                key={r.doi + r.title}
+                r={r}
+                pathology={pathologyName}
+                isFavorite={isFavorite(r.doi)}
+                onToggleFavorite={() => toggle({ doi: r.doi, title: r.title, pathology: pathologyName })}
+              />
             ))}
           </div>
           <div className="flex justify-end mt-2">

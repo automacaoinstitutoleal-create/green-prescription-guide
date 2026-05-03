@@ -27,6 +27,11 @@ const PATHOLOGIES_UNSORTED: PathologyInfo[] = [
   { name: "Transtorno bipolar", cid10: "F31", doseType: "fixo", doseStart: 25, doseTarget: 150, doseMax: 300, recommendedProduct: "HARMONY" },
   { name: "Transtorno do pânico", cid10: "F41.0", doseType: "fixo", doseStart: 25, doseTarget: 150, doseMax: 300, recommendedProduct: "HARMONY" },
   { name: "Transtornos psicóticos", cid10: "F29", doseType: "fixo", doseStart: 50, doseTarget: 200, doseMax: 600, recommendedProduct: "HARMONY" },
+  // ── Novas patologias 03/2026 ──
+  { name: "Dependência química", cid10: "F19", doseType: "fixo", doseStart: 50, doseTarget: 300, doseMax: 800, recommendedProduct: "HARMONY" },
+  { name: "Endometriose / Dor pélvica", cid10: "N80", doseType: "fixo", doseStart: 25, doseTarget: 150, doseMax: 300, recommendedProduct: "RELIEF" },
+  { name: "Climatério / Menopausa", cid10: "N95", doseType: "fixo", doseStart: 25, doseTarget: 100, doseMax: 200, recommendedProduct: "BALANCE" },
+  { name: "Dermatites / Acne / Psoríase", cid10: "L40", doseType: "fixo", doseStart: 25, doseTarget: 100, doseMax: 200, recommendedProduct: "HARMONY" },
 ];
 
 // Ordenação alfabética automática (ignora acentos)

@@ -186,6 +186,36 @@ export type Database = {
           },
         ]
       }
+      favorite_references: {
+        Row: {
+          id: string
+          doctor_id: string
+          reference_doi: string
+          reference_title: string
+          pathology: string | null
+          notes: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          doctor_id: string
+          reference_doi: string
+          reference_title: string
+          pathology?: string | null
+          notes?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          doctor_id?: string
+          reference_doi?: string
+          reference_title?: string
+          pathology?: string | null
+          notes?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
