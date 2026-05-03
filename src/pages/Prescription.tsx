@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, Check, Download, AlertTriangle, Search, Pencil, Save, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Download, AlertTriangle, Search, Pencil, Save, X, ShoppingCart, Scale } from "lucide-react";
 import {
   PATHOLOGIES, PRODUCTS,
   getDoseRange, mgDayToDropsDay,
@@ -18,6 +18,7 @@ import {
   isProductAvailableForPathology,
   type PathologyInfo, type Product, type TitulationStep, type TitulationConfig,
 } from "@/lib/prescriptionData";
+import { PRESCRIPTION_PURPOSES, type PrescriptionPurpose } from "@/lib/prescriptionPurpose";
 import { generatePrescriptionPDF, generatePatientGuidePDF } from "@/lib/pdfGenerator";
 import { ScientificReferencesCard } from "@/components/ScientificReferencesCard";
 
@@ -45,6 +46,7 @@ export default function Prescription() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
+  const [purpose, setPurpose] = useState<PrescriptionPurpose | null>(null);
   const [patient, setPatient] = useState<Patient | null>(null);
   const [doctor, setDoctor] = useState<DoctorProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -422,11 +424,77 @@ export default function Prescription() {
           </Card>
         )}
 
-        {/* ═══ Step 3: Patologia ═══ */}
+        {/* ═══ Step 3: Finalidade da prescrição ═══ */}
         {step === 3 && (
           <Card>
             <CardHeader>
-              <CardTitle>3. Patologia</CardTitle>
+              <CardTitle>3. Finalidade da prescrição</CardTitle>
+              <CardDescription>
+                Esta escolha define o formato dos documentos gerados.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {PRESCRIPTION_PURPOSES.map((p) => {
+                  const isSelected = purpose === p.id;
+                  const Icon = p.id === "JUDICIALIZACAO" ? Scale : ShoppingCart;
+                  return (
+                    <div
+                      key={p.id}
+                      className={`p-5 rounded-lg border-2 cursor-pointer transition-all ${
+                        isSelected ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+                      }`}
+                      onClick={() => setPurpose(p.id)}
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
+                            isSelected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                          }`}>
+                            <Icon className="h-5 w-5" />
+                          </div>
+                          <p className="font-bold text-base">{p.label}</p>
+                        </div>
+                        {isSelected && <Check className="h-5 w-5 text-primary" />}
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-3">{p.description}</p>
+                      <ul className="space-y-1">
+                        {p.consequences.map((c, i) => (
+                          <li key={i} className="text-xs flex items-start gap-2">
+                            <span className="text-primary mt-0.5">•</span>
+                            <span>{c}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {purpose === "JUDICIALIZACAO" && (
+                <div className="p-3 rounded-lg border border-amber-300 bg-amber-50/50 dark:bg-amber-950/10 text-sm">
+                  <p className="font-medium text-amber-900 dark:text-amber-200 flex items-center gap-1">
+                    <AlertTriangle className="h-4 w-4" /> Atenção: fluxo de judicialização
+                  </p>
+                  <p className="text-amber-900/80 dark:text-amber-200/80 text-xs mt-1">
+                    Você precisará preencher uma anamnese expandida nas próximas etapas. O sistema gerará um relatório médico circunstanciado conforme requisitos do Tema 106 do STJ e Tema 1161 do STF, para ser anexado ao processo pelo advogado do paciente.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex justify-between">
+                <Button variant="outline" onClick={() => setStep(2)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
+                <Button onClick={() => setStep(4)} disabled={!purpose}>Próximo <ArrowRight className="h-4 w-4 ml-1" /></Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ═══ Step 4: Patologia ═══ */}
+        {step === 4 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>4. Patologia</CardTitle>
               <CardDescription>Selecione a condição clínica do paciente</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -473,18 +541,18 @@ export default function Prescription() {
               )}
 
               <div className="flex justify-between">
-                <Button variant="outline" onClick={() => setStep(2)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
-                <Button onClick={() => setStep(4)} disabled={!selectedPathology}>Próximo <ArrowRight className="h-4 w-4 ml-1" /></Button>
+                <Button variant="outline" onClick={() => setStep(3)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
+                <Button onClick={() => setStep(5)} disabled={!selectedPathology}>Próximo <ArrowRight className="h-4 w-4 ml-1" /></Button>
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* ═══ Step 4: Produto ═══ */}
-        {step === 4 && (
+        {/* ═══ Step 5: Produto ═══ */}
+        {step === 5 && (
           <Card>
             <CardHeader>
-              <CardTitle>4. Produto</CardTitle>
+              <CardTitle>5. Produto</CardTitle>
               <CardDescription>Selecione o produto a ser prescrito</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -602,18 +670,18 @@ export default function Prescription() {
 
               <p className="text-xs text-muted-foreground italic">⚕ O médico pode escolher qualquer produto — a recomendação é uma sugestão baseada na literatura.</p>
               <div className="flex justify-between">
-                <Button variant="outline" onClick={() => setStep(3)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
-                <Button onClick={() => setStep(5)} disabled={!selectedProduct}>Próximo <ArrowRight className="h-4 w-4 ml-1" /></Button>
+                <Button variant="outline" onClick={() => setStep(4)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
+                <Button onClick={() => setStep(6)} disabled={!selectedProduct}>Próximo <ArrowRight className="h-4 w-4 ml-1" /></Button>
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* ═══ Step 5: Posologia ═══ */}
-        {step === 5 && selectedProduct && (
+        {/* ═══ Step 6: Posologia ═══ */}
+        {step === 6 && selectedProduct && (
           <Card>
             <CardHeader>
-              <CardTitle>5. Posologia</CardTitle>
+              <CardTitle>6. Posologia</CardTitle>
               <CardDescription>Defina os valores exatos do protocolo de titulação — "start low, go slow"</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -782,18 +850,18 @@ export default function Prescription() {
               <p className="text-xs text-muted-foreground italic">⚕ Todas as sugestões são baseadas em literatura clínica. O médico tem autonomia total para ajustar qualquer valor.</p>
 
               <div className="flex justify-between">
-                <Button variant="outline" onClick={() => setStep(4)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
-                <Button onClick={() => setStep(6)}>Próximo <ArrowRight className="h-4 w-4 ml-1" /></Button>
+                <Button variant="outline" onClick={() => setStep(5)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
+                <Button onClick={() => setStep(7)}>Próximo <ArrowRight className="h-4 w-4 ml-1" /></Button>
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* ═══ Step 6: Documentos ═══ */}
-        {step === 6 && selectedProduct && selectedPathology && (
+        {/* ═══ Step 7: Documentos ═══ */}
+        {step === 7 && selectedProduct && selectedPathology && (
           <Card>
             <CardHeader>
-              <CardTitle>6. Documentos</CardTitle>
+              <CardTitle>7. Documentos</CardTitle>
               <CardDescription>Revise os dados e gere os PDFs. Todos os campos são editáveis.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -847,7 +915,7 @@ export default function Prescription() {
               </div>
 
               <div className="flex justify-between">
-                <Button variant="outline" onClick={() => setStep(5)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
+                <Button variant="outline" onClick={() => setStep(6)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
                 <Button onClick={() => navigate(`/pacientes/${patient.id}/historico`)}>
                   Finalizar Prescrição
                 </Button>
