@@ -671,7 +671,32 @@ export default function Prescription() {
               <p className="text-xs text-muted-foreground italic">⚕ O médico pode escolher qualquer produto — a recomendação é uma sugestão baseada na literatura.</p>
               <div className="flex justify-between">
                 <Button variant="outline" onClick={() => setStep(4)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
-                <Button onClick={() => setStep(6)} disabled={!selectedProduct}>Próximo <ArrowRight className="h-4 w-4 ml-1" /></Button>
+                <Button
+                  onClick={() => {
+                    if (purpose === "JUDICIALIZACAO" && selectedProduct && selectedPathology) {
+                      // Em judicialização: dose máxima fixa, validade 1 ano, sem titulação.
+                      // Calcula gotas/dose dividindo a dose-alvo diária por 2 tomadas.
+                      const range = getDoseRange(selectedPathology, weight);
+                      const maxMgDay = range.max;
+                      const dropsPerDay = mgDayToDropsDay(maxMgDay, selectedProduct);
+                      const dropsPerDose = Math.max(1, Math.round(dropsPerDay / 2));
+                      setMaintenanceDrops(dropsPerDose);
+                      setInitialDrops(dropsPerDose);
+                      setIncrement(0);
+                      setIntervalDays(0);
+                      // Validade da receita: 1 ano
+                      const oneYear = new Date();
+                      oneYear.setFullYear(oneYear.getFullYear() + 1);
+                      setReturnDate(oneYear.toISOString().slice(0, 10));
+                      setStep(7); // pula posologia
+                    } else {
+                      setStep(6);
+                    }
+                  }}
+                  disabled={!selectedProduct}
+                >
+                  Próximo <ArrowRight className="h-4 w-4 ml-1" />
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -915,7 +940,7 @@ export default function Prescription() {
               </div>
 
               <div className="flex justify-between">
-                <Button variant="outline" onClick={() => setStep(6)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
+                <Button variant="outline" onClick={() => setStep(purpose === "JUDICIALIZACAO" ? 5 : 6)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
                 <Button onClick={() => navigate(`/pacientes/${patient.id}/historico`)}>
                   Finalizar Prescrição
                 </Button>
