@@ -491,19 +491,20 @@ export default function Prescription() {
               {(() => {
                 const visibleProducts = PRODUCTS.filter(p => isProductAvailableForPathology(p, selectedPathology));
                 const precision = visibleProducts.filter(p => p.productLine === "PRECISION");
-                const line6000 = visibleProducts.filter(p => p.productLine === "LINE_6000");
+                const essential = visibleProducts.filter(p => p.productLine === "ESSENTIAL");
 
                 const renderProductCard = (product: Product, opts: { subdued?: boolean } = {}) => {
                   const isRecommended = selectedPathology?.recommendedProduct === product.name;
                   const isSelected = selectedProduct?.name === product.name;
-                  const isSecondChoice = product.productLine === "LINE_6000" && product.secondChoiceFor === selectedPathology?.recommendedProduct;
-                  const isTypeA = product.type === "A";
+                  const isSecondChoice = product.productLine === "ESSENTIAL"
+                    && !!selectedPathology?.recommendedProduct
+                    && (product.secondChoiceFor ?? []).includes(selectedPathology.recommendedProduct);
                   return (
                     <div
                       key={product.name}
                       className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
                         isSelected
-                          ? (isTypeA ? "border-destructive bg-destructive/5" : "border-primary bg-primary/5")
+                          ? "border-primary bg-primary/5"
                           : opts.subdued
                             ? "border-border/60 hover:border-primary/40"
                             : "border-border hover:border-primary/50"
@@ -513,7 +514,7 @@ export default function Prescription() {
                       <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-bold text-lg">{product.fullLabel.split(" — ")[0]}</p>
-                          <Badge variant={isTypeA ? "destructive" : "outline"}>{product.typeLabel}</Badge>
+                          <Badge variant="outline">{product.typeLabel}</Badge>
                           {isRecommended && <Badge className="bg-primary text-primary-foreground">✓ Indicado para este caso</Badge>}
                           {isSecondChoice && <Badge variant="secondary">Segunda opção</Badge>}
                         </div>
@@ -522,16 +523,6 @@ export default function Prescription() {
                       <p className="text-sm text-muted-foreground mb-2">{product.description}</p>
                       {isSelected && (
                         <div className="mt-3 space-y-3">
-                          {product.requiresTypeAWarning && (
-                            <div className="p-3 rounded border-2 border-destructive bg-destructive/10 text-sm space-y-1">
-                              <p className="font-bold text-destructive flex items-center gap-1">
-                                <AlertTriangle className="h-4 w-4" /> RECEITUÁRIO TIPO A — THC 1,4% (100mg/frasco · 0,09mg/gota)
-                              </p>
-                              <p>Indicado exclusivamente para cuidados paliativos em situação clínica irreversível ou terminal.</p>
-                              <p>Exige <strong>Notificação de Receita A</strong> (talonário especial).</p>
-                              <p>Confirme que o paciente se enquadra nos critérios da <strong>RDC Anvisa 327/2019</strong>.</p>
-                            </div>
-                          )}
                           <div className="p-3 rounded bg-muted text-sm">
                             <p className="font-medium mb-1">Justificativa clínica:</p>
                             <p>{product.clinicalJustification}</p>
@@ -591,18 +582,18 @@ export default function Prescription() {
                       </div>
                     )}
 
-                    {line6000.length > 0 && (
+                    {essential.length > 0 && (
                       <div className="space-y-3 pt-2">
                         <div className="border-t border-border/60 pt-4">
                           <div className="flex items-center gap-2 mb-1">
-                            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Linha 6000mg</h3>
+                            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Linha Essential</h3>
                             <Badge variant="outline">opção alternativa</Badge>
                           </div>
                           <p className="text-xs text-muted-foreground italic mb-3">
                             Composição mais simples. Indicados quando os produtos da Linha Precision não estiverem disponíveis ou como alternativa de entrada ao tratamento.
                           </p>
                         </div>
-                        <div className="space-y-3">{line6000.map(p => renderProductCard(p, { subdued: true }))}</div>
+                        <div className="space-y-3">{essential.map(p => renderProductCard(p, { subdued: true }))}</div>
                       </div>
                     )}
                   </>
@@ -626,14 +617,6 @@ export default function Prescription() {
               <CardDescription>Defina os valores exatos do protocolo de titulação — "start low, go slow"</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {selectedProduct.requiresTypeAWarning && (
-                <div className="p-3 rounded border-2 border-destructive bg-destructive/10 text-sm space-y-1">
-                  <p className="font-bold text-destructive flex items-center gap-1">
-                    <AlertTriangle className="h-4 w-4" /> RECEITUÁRIO TIPO A — THC 1,4% (100mg/frasco · 0,09mg/gota)
-                  </p>
-                  <p>Indicado exclusivamente para cuidados paliativos em situação clínica irreversível ou terminal. Exige <strong>Notificação de Receita A</strong> (talonário especial). Confirme RDC Anvisa 327/2019.</p>
-                </div>
-              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
                   <Label>Dose inicial (gotas/tomada)</Label>
@@ -814,14 +797,6 @@ export default function Prescription() {
               <CardDescription>Revise os dados e gere os PDFs. Todos os campos são editáveis.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {selectedProduct.requiresTypeAWarning && (
-                <div className="p-3 rounded border-2 border-destructive bg-destructive/10 text-sm space-y-1">
-                  <p className="font-bold text-destructive flex items-center gap-1">
-                    <AlertTriangle className="h-4 w-4" /> RECEITUÁRIO TIPO A — THC 1,4% (100mg/frasco · 0,09mg/gota)
-                  </p>
-                  <p>Indicado exclusivamente para cuidados paliativos em situação clínica irreversível ou terminal. Exige <strong>Notificação de Receita A</strong> (talonário especial). Confirme RDC Anvisa 327/2019.</p>
-                </div>
-              )}
               <div className="grid gap-4">
                 <div className="p-3 rounded-lg bg-muted">
                   <p className="text-xs text-muted-foreground">Médico</p>
