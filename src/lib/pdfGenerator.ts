@@ -1,26 +1,25 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { PATHOLOGIES, getDoseRange, type Product, type TitulationStep, type TitulationConfig } from "./prescriptionData";
+import {
+  PDF_THEME,
+  drawPageHeader,
+  drawPageFooter,
+  drawSectionHeader,
+  drawCallout,
+  drawHorizontalRule,
+  drawSignatureBlock,
+  writeParagraph,
+  writeKeyValue,
+  ensureSpace,
+  contentWidth,
+  type DoctorInfo as ThemeDoctorInfo,
+  type PatientInfo as ThemePatientInfo,
+} from "./pdfTheme";
 
-// ── Shared types ──
-
-interface DoctorInfo {
-  full_name: string;
-  crm: string;
-  specialty: string;
-  phone?: string;
-  address?: string;
-  email?: string;
-}
-
-interface PatientInfo {
-  full_name: string;
-  cpf: string;
-  rg?: string | null;
-  birth_date?: string | null;
-  weight?: number | null;
-  address?: string | null;
-}
+// Re-export tipos para compatibilidade (mantém imports externos funcionando)
+type DoctorInfo = ThemeDoctorInfo;
+type PatientInfo = ThemePatientInfo;
 
 interface PrescriptionInfo {
   pathology: string;
@@ -54,45 +53,14 @@ interface GuideScheduleStep {
 }
 
 function checkPageBreak(doc: jsPDF, y: number, needed: number): number {
-  if (y + needed > doc.internal.pageSize.getHeight() - 20) {
-    doc.addPage();
-    return 20;
-  }
-  return y;
-}
-
-function drawDoctorHeader(doc: jsPDF, doctor: DoctorInfo, typeLabel: string): number {
-  const pw = doc.internal.pageSize.getWidth();
-  let y = 20;
-  doc.setFontSize(16);
-  doc.setTextColor(29, 78, 60);
-  doc.text(`Dr(a). ${doctor.full_name}`, pw / 2, y, { align: "center" });
-  y += 6;
-  doc.setFontSize(10);
-  doc.setTextColor(80);
-  doc.text(`${doctor.specialty} — CRM: ${doctor.crm}`, pw / 2, y, { align: "center" });
-  y += 5;
-  if (doctor.phone || doctor.address) {
-    doc.setFontSize(8);
-    doc.setTextColor(120);
-    doc.text([doctor.address, doctor.phone].filter(Boolean).join(" | "), pw / 2, y, { align: "center" });
-    y += 5;
-  }
-  doc.setFontSize(9);
-  doc.setTextColor(29, 158, 117);
-  doc.text(`${typeLabel}  ·  ${new Date().toLocaleDateString("pt-BR")}`, pw / 2, y, { align: "center" });
-  y += 4;
-  doc.setDrawColor(29, 158, 117);
-  doc.setLineWidth(0.5);
-  doc.line(20, y, pw - 20, y);
-  y += 8;
-  return y;
+  // Mantido para uso em autoTable e legacy. Wrapper sobre ensureSpace.
+  return ensureSpace(doc, y, needed);
 }
 
 function viaLabel(via: string): string {
-  if (via === "sublingual") return "sublingual (manter sob a língua por 60–90 segundos antes de engolir)";
-  if (via === "oral") return "oral com alimento";
-  if (via === "azeite") return "oral com azeite ou alimento gorduroso";
+  if (via === "sublingual") return "sublingual (manter sob a língua por 60 a 90 segundos antes de engolir)";
+  if (via === "oral") return "oral, com alimento";
+  if (via === "azeite") return "oral, junto com azeite ou alimento gorduroso";
   return via;
 }
 
@@ -192,127 +160,133 @@ interface ReceitaParams {
 
 export function generatePrescriptionPDF({ doctor, patient, prescriptionData: pd }: ReceitaParams) {
   const doc = new jsPDF();
-  const pw = doc.internal.pageSize.getWidth();
   const cfg = pd.config;
+  const pw = doc.internal.pageSize.getWidth();
+  const M = PDF_THEME.layout.marginX;
 
-  let y = drawDoctorHeader(doc, doctor, pd.receituarioType);
+  // ─── Cabeçalho ───
+  let y = drawPageHeader(doc, {
+    documentTitle: "Receita Médica",
+    documentSubtitle: pd.isLegalCase
+      ? "Receita branca · uso contínuo · validade 1 ano"
+      : "Receita branca · ajuste progressivo de dose",
+    doctor,
+  });
 
-  // Paciente
-  doc.setFontSize(10);
-  doc.setTextColor(0);
-  doc.setFont("helvetica", "bold");
-  doc.text("PACIENTE", 20, y); y += 6;
-  doc.setFont("helvetica", "normal");
-  doc.text(`Nome: ${patient.full_name}`, 20, y); y += 5;
-  doc.text(`CPF: ${patient.cpf}`, 20, y); y += 5;
-  if (patient.birth_date) { doc.text(`Nascimento: ${new Date(patient.birth_date).toLocaleDateString("pt-BR")}`, 20, y); y += 5; }
-  doc.text(`Peso: ${patient.weight ?? "N/I"} kg`, 20, y); y += 8;
+  // ─── Identificação do paciente ───
+  y = drawSectionHeader(doc, y, "Identificação do paciente");
+  y = writeKeyValue(doc, y, "Nome", patient.full_name, { gap: 1 });
+  const idLine = [
+    `CPF: ${patient.cpf}`,
+    patient.rg ? `RG: ${patient.rg}` : null,
+  ].filter(Boolean).join("  ·  ");
+  y = writeParagraph(doc, y, idLine, { gap: 1 });
+  if (patient.birth_date) {
+    const dob = new Date(patient.birth_date).toLocaleDateString("pt-BR");
+    y = writeParagraph(doc, y, `Data de nascimento: ${dob}`, { gap: 1 });
+  }
+  if (patient.weight) {
+    y = writeParagraph(doc, y, `Peso: ${patient.weight} kg`, { gap: 1 });
+  }
+  if (patient.address) {
+    y = writeParagraph(doc, y, `Endereço: ${patient.address}`, { size: PDF_THEME.font.bodySm, color: PDF_THEME.color.textMuted, gap: 1 });
+  }
+  y += 3;
 
-  // Diagnóstico
-  doc.setFont("helvetica", "bold");
-  doc.text("DIAGNÓSTICO", 20, y); y += 6;
-  doc.setFont("helvetica", "normal");
-  doc.text(`${pd.pathology} — CID-10: ${pd.cid10}`, 20, y); y += 8;
+  // ─── Diagnóstico ───
+  y = drawSectionHeader(doc, y, "Diagnóstico");
+  y = writeParagraph(doc, y, `${pd.pathology}`, { bold: true, gap: 0.5 });
+  y = writeParagraph(doc, y, `CID-10: ${pd.cid10}`, { color: PDF_THEME.color.textMuted, size: PDF_THEME.font.bodySm });
 
-  // Produto prescrito — nome comercial completo
-  doc.setFont("helvetica", "bold");
-  doc.text("PRODUTO PRESCRITO", 20, y); y += 6;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  const labelLines = doc.splitTextToSize(pd.productFullLabel, pw - 40);
-  doc.text(labelLines, 20, y); y += labelLines.length * 4 + 2;
-  const compLines = doc.splitTextToSize(pd.productComposition, pw - 40);
-  doc.text(compLines, 20, y); y += compLines.length * 4 + 2;
-  doc.setFont("helvetica", "italic");
-  doc.text(pd.receituarioType, 20, y); y += 8;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
+  // ─── Produto prescrito ───
+  y = drawSectionHeader(doc, y, "Produto prescrito");
+  y = writeParagraph(doc, y, pd.productFullLabel, { bold: true, gap: 0.5 });
+  y = writeParagraph(doc, y, pd.productComposition, { size: PDF_THEME.font.bodySm, gap: 1 });
+  y = writeParagraph(doc, y, pd.receituarioType, { italic: true, color: PDF_THEME.color.textMuted, size: PDF_THEME.font.bodySm });
 
-  // Posologia
-  doc.setFont("helvetica", "bold");
-  doc.text("POSOLOGIA", 20, y); y += 6;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-
-  const posLines: string[] = [
-    `Via de administração: ${viaLabel(cfg.via)}, de 12 em 12 horas (${cfg.time1}h e ${cfg.time2}h).`,
-    "",
-  ];
+  // ─── Posologia ───
+  y = drawSectionHeader(doc, y, "Posologia");
+  y = writeParagraph(doc, y, `Via de administração: ${viaLabel(cfg.via)}.`, { gap: 1.5 });
+  y = writeParagraph(doc, y, `Frequência: 2 vezes ao dia, às ${cfg.time1} e às ${cfg.time2} (intervalo de 12 horas).`, { gap: 2 });
 
   if (pd.isLegalCase) {
     // Em judicialização: dose máxima fixa, sem titulação.
     const drops = cfg.maintenanceDrops;
     const mgCbd = +(drops * pd.mgCbdPerDrop).toFixed(1);
     const mgCan = +(drops * pd.mgPerDrop).toFixed(1);
-    posLines.push(`${drops} gota(s) por dose · ${mgCbd} mg de CBD por dose · ${mgCan} mg de canabinoides totais por dose.`);
-    posLines.push(`Dose diária: ${+(mgCbd * 2).toFixed(1)} mg de CBD / ${+(mgCan * 2).toFixed(1)} mg de canabinoides totais.`);
+    y = writeParagraph(doc, y, "Dose:", { bold: true, gap: 0.5 });
+    y = writeParagraph(doc, y, `${drops} gota(s) por tomada — ${mgCbd} mg de CBD por tomada (${mgCan} mg de canabinoides totais).`, { gap: 1 });
+    y = writeParagraph(doc, y, `Dose diária total: ${(+(mgCbd * 2)).toFixed(1)} mg de CBD.`, { gap: 2 });
   } else {
-    // Compra direta: protocolo de titulação detalhado.
+    // Compra direta: cronograma de titulação resumido.
+    y = writeParagraph(doc, y, "Cronograma de ajuste de dose:", { bold: true, gap: 1 });
+
     const titSteps = pd.titulationSteps.filter(s => s.status === "titulação");
-    titSteps.forEach(s => {
-      posLines.push(`${s.days}: ${s.dropsPerDose} gotas por dose · ${s.mgCbdPerDose}mg CBD/dose`);
-    });
     const maintStep = pd.titulationSteps.find(s => s.status === "manutenção");
+
+    titSteps.forEach(s => {
+      y = writeParagraph(doc, y,
+        `• ${s.days}: ${s.dropsPerDose} gotas por tomada · ${s.mgCbdPerDose} mg de CBD por tomada`,
+        { x: M + 4, width: contentWidth(doc) - 4, gap: 0.8 }
+      );
+    });
+
     if (maintStep) {
-      posLines.push(`A partir do ${maintStep.days.replace("Dia ", "dia ").replace("+", "")}: ${maintStep.dropsPerDose} gotas por dose · ${maintStep.mgCbdPerDose}mg CBD/dose — até retorno médico.`);
+      y = writeParagraph(doc, y,
+        `• A partir do ${maintStep.days.toLowerCase().replace("+", "")}: ${maintStep.dropsPerDose} gotas por tomada · ${maintStep.mgCbdPerDose} mg de CBD por tomada — manter até nova orientação.`,
+        { x: M + 4, width: contentWidth(doc) - 4, gap: 1.5, bold: true }
+      );
     }
   }
-  posLines.push("");
-  posLines.push(`Cada gota ≈ ${pd.mgPerDrop}mg canabinoides totais · ${pd.mgCbdPerDrop}mg CBD.`);
+
+  // Concentração do produto (referência rápida)
+  y = writeParagraph(doc, y,
+    `Concentração: cada gota contém aproximadamente ${pd.mgPerDrop} mg de canabinoides totais (${pd.mgCbdPerDrop} mg de CBD).`,
+    { size: PDF_THEME.font.bodySm, color: PDF_THEME.color.textMuted, gap: 2 }
+  );
+
   if (!pd.isLegalCase) {
-    posLines.push(`Cronograma completo no Guia do Paciente.`);
+    y = drawCallout(doc, y,
+      "O cronograma completo, com explicações para o paciente, está no Guia de Uso anexo.",
+      { variant: "info", size: PDF_THEME.font.bodySm, gap: 4 }
+    );
   }
 
-  posLines.forEach(l => {
-    y = checkPageBreak(doc, y, 5);
-    doc.text(l, 24, y); y += 5;
+  // ─── Quantidade ───
+  y = drawSectionHeader(doc, y, "Quantidade prescrita");
+  if (pd.isLegalCase) {
+    y = writeParagraph(doc, y,
+      `${pd.bottles} frasco(s) de 30 mL por mês — uso contínuo.`,
+      { bold: true, gap: 1 }
+    );
+    y = drawCallout(doc, y,
+      "Validade da prescrição: 1 (um) ano a partir da data de emissão. Esta validade estendida visa garantir a continuidade do tratamento durante eventuais entraves no fornecimento judicial.",
+      { variant: "legal", title: "Validade especial", size: PDF_THEME.font.bodySm, gap: 4 }
+    );
+    y = writeParagraph(doc, y,
+      "Acompanhamento clínico mínimo a cada 90 dias para reavaliação da resposta terapêutica.",
+      { size: PDF_THEME.font.bodySm, color: PDF_THEME.color.textMuted, gap: 2 }
+    );
+  } else {
+    y = writeParagraph(doc, y,
+      `${pd.bottles} frasco(s) de 30 mL — duração estimada de 30 dias.`,
+      { bold: true, gap: 1 }
+    );
+    y = drawCallout(doc, y,
+      "Retorno em 30 dias para avaliação da resposta terapêutica e ajuste de dose, se necessário.",
+      { variant: "info", title: "Retorno obrigatório", size: PDF_THEME.font.bodySm, gap: 4 }
+    );
+  }
+
+  // ─── Bloco de assinatura ───
+  y = drawSignatureBlock(doc, y, { doctor, align: "right" });
+
+  // ─── Rodapé padronizado em todas as páginas ───
+  drawPageFooter(doc, {
+    text: "Receita Médica · Greenlion",
+    doctorName: doctor.full_name,
+    doctorCrm: doctor.crm,
   });
-  y += 3;
-  doc.setFontSize(10);
-
-  // Quantidade
-  doc.setFont("helvetica", "bold");
-  doc.text("QUANTIDADE", 20, y); y += 6;
-  doc.setFont("helvetica", "normal");
-  if (pd.isLegalCase) {
-    doc.text(`${pd.bottles} frasco(s) de 30ml por mês — uso contínuo.`, 20, y); y += 5;
-    doc.text(`Validade da prescrição: 1 (um) ano a partir da data de emissão.`, 20, y); y += 10;
-  } else {
-    doc.text(`${pd.bottles} frasco(s) de 30ml — duração: 30 dias até retorno médico.`, 20, y); y += 10;
-  }
-
-  // Retorno obrigatório
-  y = checkPageBreak(doc, y, 15);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
-  if (pd.isLegalCase) {
-    doc.text("Acompanhamento médico mínimo: a cada 90 dias para reavaliação clínica.", 20, y);
-  } else {
-    doc.text("Retorno obrigatório em 30 dias para avaliação e continuidade do ajuste de dose.", 20, y);
-  }
-  y += 10;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-
-  // Assinaturas
-  y = checkPageBreak(doc, y, 30);
-  doc.line(pw - 90, y, pw - 20, y);
-  y += 5;
-  doc.setFontSize(9);
-  doc.text("Assinatura e carimbo", pw - 80, y);
-  y += 4;
-  doc.setFontSize(7);
-  doc.setTextColor(120);
-  doc.text(`Dr(a). ${doctor.full_name} — CRM: ${doctor.crm}`, pw - 80, y);
-  if (doctor.phone) {
-    y += 3;
-    doc.text(`Tel: ${doctor.phone}`, pw - 80, y);
-  }
-
-  // Footer
-  doc.setFontSize(7);
-  doc.setTextColor(150);
-  doc.text(`Emitido em ${new Date().toLocaleDateString("pt-BR")} | Dr(a). ${doctor.full_name} — CRM: ${doctor.crm}${doctor.phone ? ` — Tel: ${doctor.phone}` : ""}`, pw / 2, doc.internal.pageSize.getHeight() - 10, { align: "center" });
 
   doc.save(`receita_${patient.full_name.replace(/\s/g, "_")}_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
@@ -330,260 +304,284 @@ interface GuiaParams {
 
 export function generatePatientGuidePDF({ doctor, patient, prescriptionData: pd, product }: GuiaParams) {
   const doc = new jsPDF();
-  const pw = doc.internal.pageSize.getWidth();
   const cfg = pd.config;
   const { steps: guideScheduleSteps, maxMgDay } = buildPatientGuideSchedule(pd, product);
   const finalGuideStep = guideScheduleSteps[guideScheduleSteps.length - 1];
+  const M = PDF_THEME.layout.marginX;
+  const CW = contentWidth(doc);
 
-  // Margens de segurança
-  const M = 22;                       // margem esquerda/direita reforçada
-  const INDENT = 4;                   // recuo para listas
-  const CONTENT_W = pw - M * 2;       // largura útil para texto comum
-  const INDENT_W = pw - M * 2 - INDENT; // largura útil para texto recuado
+  // ─── Cabeçalho ───
+  let y = drawPageHeader(doc, {
+    documentTitle: "Guia de Uso do Paciente",
+    documentSubtitle: `${pd.productFullLabel}`,
+    doctor,
+  });
 
-  let y = 20;
+  // Bloco do paciente
+  y = writeKeyValue(doc, y, "Paciente", `${patient.full_name}${patient.weight ? ` · ${patient.weight} kg` : ""}`, { gap: 1 });
+  y = writeKeyValue(doc, y, "Tratamento para", `${pd.pathology} (CID-10: ${pd.cid10})`, { gap: 4 });
 
-  // Helper: escreve um parágrafo já quebrado, paginando e respeitando maxWidth
-  const writePara = (text: string, opts?: { x?: number; width?: number; size?: number; bold?: boolean; gap?: number }) => {
-    const x = opts?.x ?? M;
-    const width = opts?.width ?? CONTENT_W;
-    const size = opts?.size ?? 9;
-    const bold = opts?.bold ?? false;
-    const gap = opts?.gap ?? 1;
-    doc.setFontSize(size);
-    doc.setFont("helvetica", bold ? "bold" : "normal");
+  // ───────────────────────────────────────
+  // 1. POR QUE ESTE PRODUTO FOI INDICADO
+  // ───────────────────────────────────────
+  y = drawSectionHeader(doc, y, "Por que este produto foi indicado para você", { number: 1 });
+  y = writeParagraph(doc, y, product.clinicalJustification, { gap: 2 });
+  y = writeParagraph(doc, y, product.cannabinoidJustification, { gap: 4 });
 
-    const paragraphs = String(text ?? "").split("\n");
-    const lineH = size * 0.42;
+  // ───────────────────────────────────────
+  // 2. COMO TOMAR
+  // ───────────────────────────────────────
+  y = drawSectionHeader(doc, y, "Como tomar o seu medicamento", { number: 2 });
 
-    paragraphs.forEach((paragraph, index) => {
-      const lines = doc.splitTextToSize(paragraph || " ", Math.max(40, width - 2));
-      const blockHeight = lines.length * lineH;
-      y = checkPageBreak(doc, y, blockHeight + 1);
-      doc.text(lines, x, y, { maxWidth: Math.max(40, width - 2) });
-      y += blockHeight;
-      if (index < paragraphs.length - 1) y += 1.5;
-    });
-
-    y += gap;
-  };
-
-  const writeSectionTitle = (title: string) => {
-    y = checkPageBreak(doc, y, 12);
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(0);
-    const lines = doc.splitTextToSize(title, CONTENT_W - 2);
-    const lineH = 4.8;
-    lines.forEach((ln: string) => {
-      doc.text(ln, M, y, { maxWidth: CONTENT_W - 2 });
-      y += lineH;
-    });
-    y += 1;
-  };
-
-  // ── Cabeçalho minimalista (sem faixa colorida) ──
-  const M_TOP = 18;
-  doc.setTextColor(29, 78, 60);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
-  doc.text("Guia de Uso — Greenlion Precision", pw / 2, M_TOP, { align: "center" });
-
-  doc.setTextColor(90);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  const headPatient = doc.splitTextToSize(`Paciente: ${patient.full_name} · ${patient.weight ?? "N/I"}kg`, pw - 40);
-  doc.text(headPatient[0], pw / 2, M_TOP + 6, { align: "center" });
-
-  const headProduct = doc.splitTextToSize(`Produto: ${pd.productFullLabel}`, pw - 40);
-  doc.text(headProduct[0], pw / 2, M_TOP + 11, { align: "center" });
-
-  doc.setFontSize(8);
-  doc.setTextColor(120);
-  const headDoc = doc.splitTextToSize(
-    `Médico: Dr(a). ${doctor.full_name} · CRM ${doctor.crm}${doctor.phone ? ` · Tel: ${doctor.phone}` : ""}`,
-    pw - 40,
-  );
-  doc.text(headDoc[0], pw / 2, M_TOP + 16, { align: "center" });
-  doc.text(`Data: ${new Date().toLocaleDateString("pt-BR")}`, pw / 2, M_TOP + 21, { align: "center" });
-
-  // Linha divisória sutil
-  doc.setDrawColor(29, 158, 117);
-  doc.setLineWidth(0.3);
-  doc.line(M, M_TOP + 25, pw - M, M_TOP + 25);
-
-  y = M_TOP + 32;
-  doc.setTextColor(0);
-
-  // ── Section 1: Por que ──
-  writeSectionTitle("1. POR QUE ESTE PRODUTO FOI INDICADO PARA VOCÊ");
-  writePara(product.clinicalJustification, { gap: 2 });
-  writePara(product.cannabinoidJustification, { gap: 5 });
-
-  // ── Section 2: Como tomar ──
-  writeSectionTitle("2. COMO TOMAR O SEU MEDICAMENTO");
-  const howLines = [
-    "Passo a passo:",
-    "1. Agite levemente o frasco antes de usar.",
-    "2. Coloque as gotas EMBAIXO DA LÍNGUA.",
-    "3. Segure por 60 a 90 segundos sem engolir.",
-    "4. Depois engula normalmente.",
-    `5. Tome SEMPRE nos mesmos horários: ${cfg.time1}h e ${cfg.time2}h.`,
-    "6. Para melhor absorção, tome junto com alimento gorduroso (azeite, abacate, castanhas ou amendoim).",
+  const steps: string[] = [
+    "Agite levemente o frasco antes de cada uso.",
+    "Pingue as gotas embaixo da língua.",
+    "Mantenha as gotas embaixo da língua por 60 a 90 segundos, sem engolir.",
+    "Depois desse tempo, engula normalmente.",
+    `Tome sempre nos mesmos horários: ${cfg.time1} pela manhã e ${cfg.time2} à noite (intervalo de 12 horas entre as doses).`,
+    "Para melhor absorção, tome junto com algum alimento gorduroso — por exemplo: azeite, abacate, castanhas ou amendoim.",
   ];
-  howLines.forEach(l => writePara(l, { x: M + INDENT, width: INDENT_W, gap: 0.5 }));
-  y += 3;
+  steps.forEach((step, i) => {
+    y = writeParagraph(doc, y, `${i + 1}. ${step}`, {
+      x: M + 4, width: CW - 4, size: PDF_THEME.font.body, gap: 1.5,
+    });
+  });
+  y += 2;
 
-  // ── Section 3: Cronograma ──
-  writeSectionTitle("3. SEU CRONOGRAMA COMPLETO DE USO");
-  writePara(
-    "A receita mostra o início do ajuste; este guia traz a progressão completa até a dose máxima da patologia.",
-    { size: 8, gap: 2 },
+  // ───────────────────────────────────────
+  // 3. CRONOGRAMA
+  // ───────────────────────────────────────
+  y = drawSectionHeader(doc, y, "Seu cronograma de uso", { number: 3 });
+  y = writeParagraph(doc, y,
+    "O tratamento começa com uma dose pequena e aumenta aos poucos. Esse aumento gradual permite que seu corpo se acostume com o medicamento e ajuda a identificar a dose ideal para você, com menos efeitos indesejados.",
+    { gap: 3 }
   );
 
-  guideScheduleSteps.forEach((s) => {
-    const title = s.status === "dose_maxima"
-      ? `Semana ${s.week} (${s.days}) — Dose máxima da patologia:`
-      : `Semana ${s.week} (${s.days}):`;
-    writePara(title, { x: M + INDENT, width: INDENT_W, size: 9, bold: true, gap: 0.2 });
-    writePara(
-      `${cfg.time1}h → ${s.dropsPerDose} gotas · ${cfg.time2}h → ${s.dropsPerDose} gotas`,
-      { x: M + INDENT + 4, width: INDENT_W - 4, size: 9, gap: 1.5 },
-    );
-  });
-
-  if (finalGuideStep) {
-    writePara(
-      `Ao atingir a semana ${finalGuideStep.week}, correspondente à dose máxima prevista para ${pd.pathology}${maxMgDay ? ` (~${maxMgDay.toFixed(0)} mg CBD/dia)` : ""}, não aumente além disso sem nova orientação médica.`,
-      { x: M + INDENT, width: INDENT_W, size: 9, gap: 1.5 },
-    );
-    writePara(
-      "Se houver efeitos adversos, volte para a dose da semana anterior e entre em contato com o consultório.",
-      { x: M + INDENT, width: INDENT_W, size: 9, gap: 3 },
-    );
-  }
-
-  writePara("★ AO FINAL DE 30 DIAS: entre em contato com o consultório.", {
-    x: M + INDENT, width: INDENT_W, size: 9, bold: true, gap: 0.5,
-  });
-  writePara("O médico vai avaliar sua resposta e decidir o próximo ajuste de dose.", {
-    x: M + INDENT, width: INDENT_W, size: 8, gap: 5,
-  });
-
-  // Tabela resumida do cronograma
-  y = checkPageBreak(doc, y, 30);
+  // Tabela do cronograma (mais legível, fonte maior)
+  y = ensureSpace(doc, y, 30);
   autoTable(doc, {
     startY: y,
-    head: [["Semana", "Período", "Gotas/dose", "Frequência", "Total/dia", "Status"]],
+    head: [["Semana", "Período", "Gotas por tomada", "Frequência", "Total no dia", "Status"]],
     body: guideScheduleSteps.map(s => [
-      `Sem. ${s.week}`,
+      `${s.week}`,
       s.days,
       `${s.dropsPerDose} gotas`,
-      s.frequency,
+      "12 em 12h",
       `${Number(s.dropsPerDose) * 2} gotas`,
-      s.status === "dose_maxima" ? "Dose máxima" : "Titulação",
+      s.status === "dose_maxima" ? "Dose final" : "Aumento gradual",
     ]),
     theme: "grid",
-    headStyles: { fillColor: [29, 158, 117], fontSize: 8, halign: "center", textColor: 255 },
-    styles: { fontSize: 8, cellPadding: 2, overflow: "linebreak", valign: "middle" },
-    columnStyles: {
-      0: { cellWidth: 18, halign: "center" },
-      1: { cellWidth: 30 },
-      2: { cellWidth: 26, halign: "center" },
-      3: { cellWidth: 30 },
-      4: { cellWidth: 24, halign: "center" },
-      5: { cellWidth: 26, halign: "center" },
+    headStyles: {
+      fillColor: PDF_THEME.color.primary as unknown as [number, number, number],
+      fontSize: 9,
+      halign: "center",
+      textColor: 255,
+      cellPadding: 2.5,
     },
+    styles: {
+      fontSize: 9,
+      cellPadding: 2.5,
+      overflow: "linebreak",
+      valign: "middle",
+      textColor: PDF_THEME.color.text as unknown as [number, number, number],
+    },
+    columnStyles: {
+      0: { cellWidth: 17, halign: "center" },
+      1: { cellWidth: 30, halign: "center" },
+      2: { cellWidth: 28, halign: "center" },
+      3: { cellWidth: 24, halign: "center" },
+      4: { cellWidth: 24, halign: "center" },
+      5: { cellWidth: 38, halign: "center" },
+    },
+    alternateRowStyles: { fillColor: [248, 249, 250] as unknown as [number, number, number] },
     margin: { left: M, right: M },
     tableWidth: "auto",
   });
-  y = (doc as any).lastAutoTable.finalY + 8;
+  // @ts-expect-error jspdf-autotable adds lastAutoTable to doc instance
+  y = doc.lastAutoTable.finalY + 5;
 
-  // ── Section 4: Sinais de dose alta demais ──
-  writeSectionTitle("4. SINAIS DE DOSE ALTA DEMAIS — O QUE FAZER");
-  const excessLines = [
-    "Se sentir qualquer um destes sinais:",
-    "• Tontura",
-    "• Sonolência excessiva",
-    "• Boca muito seca",
-    "• Náusea",
-    "• Desorientação ou mal-estar",
-    "",
-    "NÃO SE PREOCUPE — não é perigoso. Significa que a dose está um pouco acima do seu limite individual.",
-    "",
-    "O QUE FAZER IMEDIATAMENTE:",
-    "→ Volte para a dose da semana anterior.",
-    `→ Entre em contato com o consultório${doctor.phone ? `: ${doctor.phone}` : "."}`,
-    "→ Não retome a dose maior sem orientação médica.",
+  if (finalGuideStep) {
+    const maxDoseInfo = maxMgDay ? `, equivalente a aproximadamente ${maxMgDay.toFixed(0)} mg de CBD por dia` : "";
+    y = drawCallout(doc, y,
+      `Ao chegar na semana ${finalGuideStep.week}, você atinge a dose máxima recomendada para ${pd.pathology}${maxDoseInfo}. A partir daí, mantenha essa dose. Não aumente mais sem orientação do seu médico.`,
+      { variant: "success", title: "Dose final do tratamento", size: PDF_THEME.font.bodySm, gap: 4 }
+    );
+  }
+
+  // ───────────────────────────────────────
+  // 4. SE A DOSE ESTIVER ALTA DEMAIS
+  // ───────────────────────────────────────
+  y = drawSectionHeader(doc, y, "Se a dose estiver alta demais", { number: 4 });
+  y = writeParagraph(doc, y, "Fique atento(a) a estes sinais:", { gap: 1 });
+
+  const excessSigns = [
+    "Tontura ou sensação de cabeça leve",
+    "Sono excessivo ou cansaço fora do normal",
+    "Boca muito seca",
+    "Náusea ou enjoo",
+    "Sensação de mal-estar ou desorientação",
   ];
-  excessLines.forEach(l => writePara(l, { x: M + INDENT, width: INDENT_W, gap: 0.5 }));
+  excessSigns.forEach(sign => {
+    y = writeParagraph(doc, y, `• ${sign}`, {
+      x: M + 4, width: CW - 4, size: PDF_THEME.font.body, gap: 0.8,
+    });
+  });
+  y += 2;
+
+  y = drawCallout(doc, y,
+    "Esses sinais não são perigosos. Eles apenas indicam que a dose está um pouco acima do que o seu corpo tolera bem. Eles passam ao reduzir a dose.",
+    { variant: "info", size: PDF_THEME.font.bodySm, gap: 3 }
+  );
+
+  y = writeParagraph(doc, y, "O que fazer se sentir esses sinais:", { bold: true, gap: 1 });
+  const whatToDo = [
+    `Volte à dose da semana anterior (uma dose menor).`,
+    `Entre em contato com o consultório${doctor.phone ? ` pelo telefone ${doctor.phone}` : ""}.`,
+    `Não volte a aumentar a dose sem orientação médica.`,
+  ];
+  whatToDo.forEach((step, i) => {
+    y = writeParagraph(doc, y, `${i + 1}. ${step}`, {
+      x: M + 4, width: CW - 4, size: PDF_THEME.font.body, gap: 1.5,
+    });
+  });
   y += 3;
 
-  // ── Section 5: Cuidados importantes ──
-  writeSectionTitle("5. CUIDADOS IMPORTANTES");
-  const careLines = [
-    "• Não pare de usar de repente — se precisar parar, reduza 25% por semana e avise o médico.",
-    "• Informe TODOS os seus médicos que está usando este medicamento (pode interagir com anticoagulantes, antiepilépticos, antidepressivos).",
-    "• Guarde em local fresco, seco e escuro, longe da luz solar.",
-    "• Mantenha fora do alcance de crianças.",
-    "• Verifique o número do lote e o COA no QR Code da embalagem.",
-    "• Não tome com álcool.",
-  ];
-  careLines.forEach(l => writePara(l, { x: M + INDENT, width: INDENT_W, gap: 0.5 }));
-  y += 3;
+  // ───────────────────────────────────────
+  // 5. CUIDADOS IMPORTANTES
+  // ───────────────────────────────────────
+  y = drawSectionHeader(doc, y, "Cuidados importantes durante o tratamento", { number: 5 });
 
-  // ── Section 6: Retorno ──
-  writeSectionTitle("6. RETORNO E ACOMPANHAMENTO");
+  const careItems = [
+    {
+      title: "Não interrompa o tratamento de forma abrupta.",
+      detail: "Se for necessário parar, faça uma redução gradual de cerca de 25% por semana, sempre com orientação médica.",
+    },
+    {
+      title: "Avise todos os seus médicos sobre este medicamento.",
+      detail: "O canabidiol pode interagir com outros remédios — especialmente anticoagulantes (que afinam o sangue), antiepilépticos e antidepressivos.",
+    },
+    {
+      title: "Guarde o frasco em local fresco, seco e protegido da luz.",
+      detail: "Evite expor o produto à luz solar direta ou a temperaturas elevadas. A luz e o calor podem reduzir a eficácia do medicamento.",
+    },
+    {
+      title: "Mantenha fora do alcance de crianças e animais domésticos.",
+    },
+    {
+      title: "Não consuma bebidas alcoólicas durante o tratamento.",
+      detail: "O álcool pode potencializar efeitos indesejados, como sonolência e tontura.",
+    },
+    {
+      title: "Confira o lote e o laudo de qualidade (COA) na embalagem.",
+      detail: "O QR Code do frasco dá acesso ao certificado de análise do produto.",
+    },
+  ];
+  careItems.forEach(item => {
+    y = writeParagraph(doc, y, `• ${item.title}`, {
+      x: M + 4, width: CW - 4, bold: true, size: PDF_THEME.font.body, gap: 0.5,
+    });
+    if (item.detail) {
+      y = writeParagraph(doc, y, item.detail, {
+        x: M + 8, width: CW - 8, size: PDF_THEME.font.bodySm, color: PDF_THEME.color.textMuted, gap: 1.5,
+      });
+    }
+  });
+  y += 2;
+
+  // ───────────────────────────────────────
+  // 6. RETORNO
+  // ───────────────────────────────────────
+  y = drawSectionHeader(doc, y, "Retorno e acompanhamento", { number: 6 });
+
   const returnDateFormatted = cfg.returnDate
     ? new Date(cfg.returnDate + "T12:00:00").toLocaleDateString("pt-BR")
-    : "A definir";
-  const followLines = [
-    `Sua consulta de retorno: ${returnDateFormatted}`,
-    "",
-    "Nessa consulta o médico vai avaliar:",
-    "• Como você está respondendo ao tratamento.",
-    "• Se a dose atual está adequada.",
-    "• Se precisa aumentar, reduzir ou manter.",
-    "• Se o produto segue sendo o mais indicado.",
-    "",
-    "Para se preparar, anote todo dia:",
-    "• Dose que está tomando.",
-    "• Nível de dor ou intensidade dos sintomas (0 a 10).",
-    "• Qualidade do sono.",
-    "• Qualquer efeito que tenha sentido.",
-    "",
-    "Contato para dúvidas ou efeitos adversos antes do retorno:",
-    `Tel: ${doctor.phone || "(consulte o consultório)"}`,
+    : "a definir com o consultório";
+
+  y = drawCallout(doc, y,
+    `Sua próxima consulta: ${returnDateFormatted}`,
+    { variant: "success", size: PDF_THEME.font.body, gap: 3 }
+  );
+
+  y = writeParagraph(doc, y, "Nessa consulta, o médico vai avaliar:", { gap: 1 });
+  const evalItems = [
+    "Como você está respondendo ao tratamento.",
+    "Se a dose atual está adequada para o seu caso.",
+    "Se é preciso aumentar, reduzir ou manter a dose.",
+    "Se o produto continua sendo o mais indicado.",
   ];
-  followLines.forEach(l => writePara(l, { x: M + INDENT, width: INDENT_W, gap: 0.5 }));
+  evalItems.forEach(item => {
+    y = writeParagraph(doc, y, `• ${item}`, {
+      x: M + 4, width: CW - 4, size: PDF_THEME.font.body, gap: 0.8,
+    });
+  });
+  y += 2;
+
+  y = writeParagraph(doc, y, "Para se preparar bem para a consulta, anote diariamente:", { bold: true, gap: 1 });
+  const trackItems = [
+    "A dose que você está tomando.",
+    "Sua dor ou seus sintomas em uma escala de 0 (nenhum) a 10 (insuportável).",
+    "Como está sendo a qualidade do sono.",
+    "Qualquer efeito que você tenha sentido — bom ou ruim.",
+  ];
+  trackItems.forEach(item => {
+    y = writeParagraph(doc, y, `• ${item}`, {
+      x: M + 4, width: CW - 4, size: PDF_THEME.font.body, gap: 0.8,
+    });
+  });
+  y += 3;
+
+  if (doctor.phone) {
+    y = drawCallout(doc, y,
+      `Para dúvidas ou efeitos adversos antes do retorno, ligue para o consultório: ${doctor.phone}`,
+      { variant: "info", size: PDF_THEME.font.bodySm, gap: 4 }
+    );
+  }
+
+  // ───────────────────────────────────────
+  // 7. TCLE
+  // ───────────────────────────────────────
+  y = drawSectionHeader(doc, y, "Termo de Consentimento Livre e Esclarecido", { number: 7 });
+  y = writeParagraph(doc, y,
+    `Eu, ${patient.full_name}, declaro ter sido informado(a) pelo(a) médico(a) Dr(a). ${doctor.full_name} sobre os possíveis benefícios e riscos do tratamento com ${pd.productFullLabel}.`,
+    { size: PDF_THEME.font.bodySm, gap: 2 }
+  );
+  y = writeParagraph(doc, y,
+    "Estou ciente de que o medicamento pode causar efeitos como tontura, sonolência, boca seca, alterações no apetite e que pode interagir com outros remédios em uso.",
+    { size: PDF_THEME.font.bodySm, gap: 2 }
+  );
+  y = writeParagraph(doc, y,
+    "Fui orientado(a) sobre o ajuste gradual da dose e sei que devo entrar em contato com o consultório caso sinta efeitos adversos, ou ao final de 30 dias para a continuidade do tratamento.",
+    { size: PDF_THEME.font.bodySm, gap: 2 }
+  );
+  y = writeParagraph(doc, y,
+    "Declaro ciência de que o produto não é isento de riscos e não substitui outros tratamentos já prescritos.",
+    { size: PDF_THEME.font.bodySm, gap: 2 }
+  );
+  y = writeParagraph(doc, y,
+    "Autorizo o início do tratamento conforme a prescrição médica recebida.",
+    { size: PDF_THEME.font.bodySm, gap: 4 }
+  );
+
+  // Linha de assinatura do paciente
+  y = ensureSpace(doc, y, 25);
+  y += 5;
+  doc.setDrawColor(PDF_THEME.color.text[0], PDF_THEME.color.text[1], PDF_THEME.color.text[2]);
+  doc.setLineWidth(0.4);
+  doc.line(M, y, M + 90, y);
   y += 4;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(PDF_THEME.font.bodySm);
+  doc.setTextColor(PDF_THEME.color.text[0], PDF_THEME.color.text[1], PDF_THEME.color.text[2]);
+  doc.text("Assinatura do paciente ou responsável legal", M, y);
+  y += 5;
+  doc.text(`Data: ___ / ___ / ______`, M, y);
 
-  // ── Section 7: TCLE ──
-  writeSectionTitle("7. TCLE — TERMO DE CONSENTIMENTO LIVRE E ESCLARECIDO");
-  const tcle = `Eu, ${patient.full_name}, declaro ter sido informado(a) pelo médico ${doctor.full_name} sobre os potenciais benefícios e riscos do tratamento com ${pd.productFullLabel}, incluindo possibilidade de tontura, sonolência excessiva, boca seca, alterações de apetite e interações com outros medicamentos.
-
-Fui orientado(a) sobre o protocolo de titulação e sei que devo entrar em contato com o médico ao sentir efeitos adversos ou ao final de 30 dias para continuidade do tratamento.
-
-Autorizo o início do tratamento conforme prescrição médica.
-
-Declaro ciência de que o produto não é isento de riscos e não substitui tratamentos convencionais já indicados.
-
-Manter fora do alcance de crianças.`;
-  tcle.split("\n\n").forEach(par => writePara(par, { size: 8, gap: 2 }));
-  y += 4;
-
-  // Assinatura
-  y = checkPageBreak(doc, y, 20);
-  writePara("Assinatura do paciente / responsável: _______________________", { size: 9, gap: 2 });
-  writePara("Data: ___/___/______", { size: 9, gap: 5 });
-
-  // Rodapé
-  y = checkPageBreak(doc, y, 10);
-  doc.setDrawColor(29, 158, 117);
-  doc.setLineWidth(0.3);
-  doc.line(M, y, pw - M, y); y += 5;
-  doc.setTextColor(120);
-  writePara("Este guia é complementar à receita médica. Guarde os dois documentos juntos.", { size: 8 });
+  // ─── Rodapé padronizado ───
+  drawPageFooter(doc, {
+    text: "Guia de Uso · Greenlion",
+    doctorName: doctor.full_name,
+    doctorCrm: doctor.crm,
+  });
 
   doc.save(`guia_paciente_${patient.full_name.replace(/\s/g, "_")}_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
@@ -623,281 +621,253 @@ interface LegalReportParams {
 
 export function generateLegalReportPDF({ doctor, patient, prescriptionData: pd, product, answers, customFields, patientAge }: LegalReportParams) {
   const doc = new jsPDF();
-  const pw = doc.internal.pageSize.getWidth();
-  const ph = doc.internal.pageSize.getHeight();
-  const M = 18;
-  const CONTENT_W = pw - 2 * M;
-  let y = M;
+  const M = PDF_THEME.layout.marginX;
+  const CW = contentWidth(doc);
 
-  // Helpers
-  const setHeading = () => { doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(29, 78, 60); };
-  const setBody = () => { doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(20); };
-  const setSmall = () => { doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(80); };
+  // ─── Cabeçalho ───
+  let y = drawPageHeader(doc, {
+    documentTitle: "Relatório Médico Circunstanciado",
+    documentSubtitle: "Pleito de fornecimento de medicamento — Tema 106 STJ · Tema 1161 STF",
+    doctor,
+  });
 
-  const ensureSpace = (needed: number) => {
-    if (y + needed > ph - 20) {
-      doc.addPage();
-      y = M;
-    }
-  };
+  // ─── Identificação do médico ───
+  y = drawSectionHeader(doc, y, "Identificação do médico assistente");
+  y = writeKeyValue(doc, y, "Médico(a)", `Dr(a). ${doctor.full_name}`, { gap: 1 });
+  y = writeKeyValue(doc, y, "Especialidade", doctor.specialty, { gap: 1 });
+  y = writeKeyValue(doc, y, "Registro profissional", `CRM ${doctor.crm}`, { gap: 1 });
+  if (doctor.address) y = writeKeyValue(doc, y, "Endereço profissional", doctor.address, { gap: 1 });
+  if (doctor.phone) y = writeKeyValue(doc, y, "Telefone", doctor.phone, { gap: 1 });
+  if (doctor.email) y = writeKeyValue(doc, y, "E-mail", doctor.email, { gap: 1 });
+  y += 2;
 
-  const writeParagraph = (text: string, opts?: { gap?: number; bold?: boolean; size?: number; color?: number[] }) => {
-    if (!text || !text.trim()) return;
-    const gap = opts?.gap ?? 4;
-    const size = opts?.size ?? 10;
-    const color = opts?.color ?? [20, 20, 20];
-    doc.setFont("helvetica", opts?.bold ? "bold" : "normal");
-    doc.setFontSize(size);
-    doc.setTextColor(color[0], color[1], color[2]);
-    const lines = doc.splitTextToSize(text, CONTENT_W);
-    ensureSpace(lines.length * (size * 0.4) + 2);
-    doc.text(lines, M, y);
-    y += lines.length * (size * 0.4) + gap;
-  };
-
-  const writeSectionHeader = (n: number, title: string) => {
-    ensureSpace(14);
-    setHeading();
-    doc.text(`${n}. ${title.toUpperCase()}`, M, y);
-    y += 2;
-    doc.setDrawColor(29, 158, 117);
-    doc.setLineWidth(0.4);
-    doc.line(M, y, pw - M, y);
-    y += 5;
-    setBody();
-  };
-
-  // ═══ Cabeçalho ═══
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(14);
-  doc.setTextColor(29, 78, 60);
-  doc.text("RELATÓRIO MÉDICO CIRCUNSTANCIADO", pw / 2, y, { align: "center" });
-  y += 6;
-  doc.setFontSize(10);
-  doc.setTextColor(80);
-  doc.text("Pleito de fornecimento de medicamento — Tema 106 STJ / Tema 1161 STF", pw / 2, y, { align: "center" });
-  y += 8;
-  doc.setDrawColor(29, 158, 117);
-  doc.setLineWidth(0.6);
-  doc.line(M, y, pw - M, y);
-  y += 7;
-
-  // ═══ Identificação do Médico ═══
-  setHeading();
-  doc.text("IDENTIFICAÇÃO DO MÉDICO ASSISTENTE", M, y); y += 5;
-  setBody();
-  writeParagraph(`Dr(a). ${doctor.full_name}`, { gap: 2, bold: true });
-  writeParagraph(`${doctor.specialty} — CRM: ${doctor.crm}`, { gap: 2 });
-  if (doctor.address) writeParagraph(`Endereço profissional: ${doctor.address}`, { gap: 2 });
-  if (doctor.phone) writeParagraph(`Telefone: ${doctor.phone}`, { gap: 2 });
-  if (doctor.email) writeParagraph(`E-mail: ${doctor.email}`, { gap: 2 });
-  y += 3;
-
-  // ═══ Identificação do Paciente ═══
-  setHeading();
-  doc.text("IDENTIFICAÇÃO DO PACIENTE", M, y); y += 5;
-  setBody();
-  writeParagraph(`Nome: ${patient.full_name}`, { gap: 2, bold: true });
-  writeParagraph(`CPF: ${patient.cpf}${patient.rg ? ` · RG: ${patient.rg}` : ""}`, { gap: 2 });
+  // ─── Identificação do paciente ───
+  y = drawSectionHeader(doc, y, "Identificação do paciente");
+  y = writeKeyValue(doc, y, "Nome", patient.full_name, { gap: 1 });
+  const idLine = [`CPF: ${patient.cpf}`, patient.rg ? `RG: ${patient.rg}` : null].filter(Boolean).join("  ·  ");
+  y = writeParagraph(doc, y, idLine, { gap: 1 });
   if (patient.birth_date) {
     const dob = new Date(patient.birth_date).toLocaleDateString("pt-BR");
-    writeParagraph(`Data de nascimento: ${dob}${patientAge != null ? ` (${patientAge} anos)` : ""}`, { gap: 2 });
+    const ageStr = patientAge != null ? ` (${patientAge} anos)` : "";
+    y = writeKeyValue(doc, y, "Data de nascimento", `${dob}${ageStr}`, { gap: 1 });
   }
-  if (patient.weight) writeParagraph(`Peso: ${patient.weight} kg`, { gap: 2 });
-  if (patient.address) writeParagraph(`Endereço: ${patient.address}`, { gap: 2 });
-  y += 4;
+  if (patient.weight) y = writeKeyValue(doc, y, "Peso", `${patient.weight} kg`, { gap: 1 });
+  if (patient.address) y = writeKeyValue(doc, y, "Endereço", patient.address, { gap: 1 });
+  y += 2;
 
-  // ═══ 1. História da Doença Atual ═══
-  writeSectionHeader(1, "História da Doença Atual");
-  if (answers.inicio_sintomas) writeParagraph(`Início dos sintomas: ${answers.inicio_sintomas}`);
-  if (answers.evolucao) writeParagraph(`Evolução: ${answers.evolucao}`);
-  if (answers.sintomas_atuais) writeParagraph(`Sintomas atuais: ${answers.sintomas_atuais}`);
-  if (answers.impacto_funcional) writeParagraph(`Impacto funcional: ${answers.impacto_funcional}`);
-  if (answers.exames_realizados) writeParagraph(`Exames complementares: ${answers.exames_realizados}`);
+  // ─── 1. História da Doença Atual ───
+  if (answers.inicio_sintomas || answers.evolucao || answers.sintomas_atuais || answers.impacto_funcional || answers.exames_realizados) {
+    y = drawSectionHeader(doc, y, "História da doença atual", { number: 1 });
+    if (answers.inicio_sintomas) y = writeKeyValue(doc, y, "Início dos sintomas", answers.inicio_sintomas, { gap: 2 });
+    if (answers.evolucao) {
+      y = writeParagraph(doc, y, "Evolução clínica:", { bold: true, gap: 1 });
+      y = writeParagraph(doc, y, answers.evolucao, { gap: 2 });
+    }
+    if (answers.sintomas_atuais) {
+      y = writeParagraph(doc, y, "Sintomas atuais:", { bold: true, gap: 1 });
+      y = writeParagraph(doc, y, answers.sintomas_atuais, { gap: 2 });
+    }
+    if (answers.impacto_funcional) {
+      y = writeParagraph(doc, y, "Impacto funcional na vida do paciente:", { bold: true, gap: 1 });
+      y = writeParagraph(doc, y, answers.impacto_funcional, { gap: 2 });
+    }
+    if (answers.exames_realizados) {
+      y = writeParagraph(doc, y, "Exames complementares realizados:", { bold: true, gap: 1 });
+      y = writeParagraph(doc, y, answers.exames_realizados, { gap: 2 });
+    }
+  }
 
-  // ═══ 2. Antecedentes ═══
+  // ─── 2. Antecedentes e Comorbidades ───
   if (answers.comorbidades || answers.alergias || answers.antecedentes_familiares || answers.internacoes) {
-    writeSectionHeader(2, "Antecedentes e Comorbidades");
-    if (answers.comorbidades) writeParagraph(`Comorbidades: ${answers.comorbidades}`);
-    if (answers.alergias) writeParagraph(`Alergias: ${answers.alergias}`);
-    if (answers.antecedentes_familiares) writeParagraph(`Antecedentes familiares: ${answers.antecedentes_familiares}`);
-    if (answers.internacoes) writeParagraph(`Internações/cirurgias: ${answers.internacoes}`);
+    y = drawSectionHeader(doc, y, "Antecedentes e comorbidades", { number: 2 });
+    if (answers.comorbidades) y = writeKeyValue(doc, y, "Comorbidades", answers.comorbidades, { gap: 2 });
+    if (answers.alergias) y = writeKeyValue(doc, y, "Alergias medicamentosas", answers.alergias, { gap: 2 });
+    if (answers.antecedentes_familiares) y = writeKeyValue(doc, y, "Antecedentes familiares", answers.antecedentes_familiares, { gap: 2 });
+    if (answers.internacoes) y = writeKeyValue(doc, y, "Internações e cirurgias prévias", answers.internacoes, { gap: 2 });
   }
 
-  // ═══ 3. Diagnóstico ═══
-  writeSectionHeader(3, "Diagnóstico");
-  writeParagraph(`Patologia: ${pd.pathology}`, { bold: true });
-  writeParagraph(`CID-10: ${pd.cid10}`);
+  // ─── 3. Diagnóstico ───
+  y = drawSectionHeader(doc, y, "Diagnóstico", { number: 3 });
+  y = writeParagraph(doc, y, pd.pathology, { bold: true, gap: 1 });
+  y = writeKeyValue(doc, y, "CID-10", pd.cid10, { gap: 2 });
 
-  // ═══ 4. Tratamentos Prévios — CRÍTICO ═══
-  writeSectionHeader(4, "Tratamentos Prévios — Ineficácia e Esgotamento das Alternativas SUS");
-  setSmall();
-  writeParagraph(
-    "Este bloco atende ao requisito (i) do Tema 106 do STJ: comprovação, por meio de laudo médico fundamentado e circunstanciado, da imprescindibilidade do medicamento e da ineficácia, para o tratamento da moléstia, dos fármacos fornecidos pelo SUS.",
-    { size: 8, color: [80, 80, 80], gap: 4 }
+  // ─── 4. Tratamentos prévios — CRÍTICO ───
+  y = drawSectionHeader(doc, y, "Tratamentos prévios e ineficácia das alternativas do SUS", { number: 4 });
+  y = drawCallout(doc, y,
+    "Esta seção atende ao requisito (i) do Tema 106 do STJ: comprovação, por meio de laudo médico fundamentado e circunstanciado, da imprescindibilidade do medicamento e da ineficácia, para o tratamento da moléstia, dos fármacos fornecidos pelo SUS.",
+    { variant: "legal", title: "Fundamentação legal", size: PDF_THEME.font.bodySm, gap: 4 }
   );
-  setBody();
-  if (answers.tratamentos_lista) writeParagraph(`Histórico de medicamentos e terapias utilizadas:\n${answers.tratamentos_lista}`);
+
+  if (answers.tratamentos_lista) {
+    y = writeParagraph(doc, y, "Histórico de medicamentos e terapias utilizadas:", { bold: true, gap: 1 });
+    y = writeParagraph(doc, y, answers.tratamentos_lista, { gap: 3 });
+  }
   if (answers.tentativas_sus) {
     const text = answers.tentativas_sus === "sim"
-      ? "O paciente já tentou as alternativas terapêuticas oferecidas pelo SUS / RENAME para esta condição."
-      : "As alternativas terapêuticas oferecidas pelo SUS / RENAME não foram adequadas / aplicáveis a este paciente.";
-    writeParagraph(text);
+      ? "O paciente tentou as alternativas terapêuticas oferecidas pelo SUS e pelo RENAME para esta condição."
+      : "As alternativas terapêuticas oferecidas pelo SUS e pelo RENAME não foram adequadas ou aplicáveis a este paciente.";
+    y = writeParagraph(doc, y, text, { gap: 2 });
   }
   if (answers.ineficacia_sus_justificativa) {
-    writeParagraph("Justificativa de ineficácia ou inadequação dos fármacos do SUS:", { bold: true, gap: 1 });
-    writeParagraph(answers.ineficacia_sus_justificativa);
+    y = writeParagraph(doc, y, "Justificativa da ineficácia dos fármacos do SUS para este paciente:", { bold: true, gap: 1 });
+    y = writeParagraph(doc, y, answers.ineficacia_sus_justificativa, { gap: 3 });
   }
   if (answers.efeitos_adversos_previos) {
-    writeParagraph(`Efeitos adversos significativos com tratamentos anteriores: ${answers.efeitos_adversos_previos}`);
+    y = writeKeyValue(doc, y, "Efeitos adversos significativos com tratamentos anteriores", answers.efeitos_adversos_previos, { gap: 2 });
   }
 
-  // ═══ 5. Justificativa Clínica do Canabidiol ═══
-  writeSectionHeader(5, "Justificativa Clínica para o Tratamento com Canabidiol");
-  if (answers.fundamento_indicacao) writeParagraph(`Fundamento da indicação: ${answers.fundamento_indicacao}`);
-  if (answers.expectativa_resposta) writeParagraph(`Expectativa de resposta: ${answers.expectativa_resposta}`);
+  // ─── 5. Justificativa Clínica do Canabidiol ───
+  y = drawSectionHeader(doc, y, "Justificativa clínica para o tratamento com canabidiol", { number: 5 });
+  if (answers.fundamento_indicacao) {
+    y = writeParagraph(doc, y, "Fundamento clínico da indicação:", { bold: true, gap: 1 });
+    y = writeParagraph(doc, y, answers.fundamento_indicacao, { gap: 2 });
+  }
+  if (answers.expectativa_resposta) {
+    y = writeParagraph(doc, y, "Expectativa de resposta terapêutica:", { bold: true, gap: 1 });
+    y = writeParagraph(doc, y, answers.expectativa_resposta, { gap: 2 });
+  }
   if (answers.produto_escolhido_justificativa) {
-    writeParagraph("Justificativa do produto específico:", { bold: true, gap: 1 });
-    writeParagraph(answers.produto_escolhido_justificativa);
+    y = writeParagraph(doc, y, "Justificativa da escolha deste produto específico:", { bold: true, gap: 1 });
+    y = writeParagraph(doc, y, answers.produto_escolhido_justificativa, { gap: 2 });
   }
 
-  // ═══ 6. Produto Prescrito ═══
-  writeSectionHeader(6, "Produto Prescrito");
-  writeParagraph(pd.productFullLabel, { bold: true });
-  writeParagraph(pd.productComposition);
+  // ─── 6. Produto Prescrito ───
+  y = drawSectionHeader(doc, y, "Produto prescrito", { number: 6 });
+  y = writeParagraph(doc, y, pd.productFullLabel, { bold: true, gap: 1 });
+  y = writeParagraph(doc, y, pd.productComposition, { gap: 2 });
 
-  // ═══ 7. Protocolo Terapêutico ═══
-  writeSectionHeader(7, "Protocolo Terapêutico Proposto");
-  // Posologia auto-construída a partir dos dados da prescrição
+  // ─── 7. Protocolo Terapêutico ───
+  y = drawSectionHeader(doc, y, "Protocolo terapêutico proposto", { number: 7 });
   const dropsPerDose = pd.config.maintenanceDrops || pd.titulationSteps[pd.titulationSteps.length - 1]?.dropsPerDose || 0;
   const mgCbdPerDay = +(dropsPerDose * pd.mgCbdPerDrop * 2).toFixed(1);
   const mgCanPerDay = +(dropsPerDose * pd.mgPerDrop * 2).toFixed(1);
-  writeParagraph(
-    `Posologia: ${dropsPerDose} gota(s) por via ${pd.config.via || "sublingual"}, de 12 em 12 horas (${pd.config.time1 || "08:00"} e ${pd.config.time2 || "20:00"}). ` +
-    `Dose diária estimada: ${mgCanPerDay} mg de canabinoides totais (${mgCbdPerDay} mg de CBD).`
+
+  y = writeKeyValue(doc, y, "Posologia",
+    `${dropsPerDose} gota(s) por tomada, ${pd.config.via || "via sublingual"}, a cada 12 horas (${pd.config.time1 || "08:00"} e ${pd.config.time2 || "20:00"}).`,
+    { gap: 1 }
+  );
+  y = writeKeyValue(doc, y, "Dose diária total",
+    `${mgCanPerDay} mg de canabinoides totais (sendo ${mgCbdPerDay} mg de CBD).`,
+    { gap: 1 }
   );
   if (pd.patientWeight) {
     const mgKgDay = +(mgCbdPerDay / pd.patientWeight).toFixed(2);
-    writeParagraph(`Dose por peso: ${mgKgDay} mg/kg/dia (CBD).`);
+    y = writeKeyValue(doc, y, "Dose por peso corporal", `${mgKgDay} mg de CBD por kg, por dia.`, { gap: 1 });
   }
-  if (answers.duracao_tratamento) writeParagraph(`Duração estimada: ${answers.duracao_tratamento}`);
-  if (answers.monitoramento) writeParagraph(`Plano de monitoramento: ${answers.monitoramento}`);
-  writeParagraph(`Quantidade prescrita: ${pd.bottles} frasco(s) por mês — receita com validade de 1 (um) ano para garantia de continuidade do tratamento.`, { bold: true });
+  if (answers.duracao_tratamento) {
+    y = writeKeyValue(doc, y, "Duração estimada do tratamento", answers.duracao_tratamento, { gap: 1 });
+  }
+  if (answers.monitoramento) {
+    y = writeParagraph(doc, y, "Plano de monitoramento e acompanhamento:", { bold: true, gap: 1 });
+    y = writeParagraph(doc, y, answers.monitoramento, { gap: 2 });
+  }
+  y = drawCallout(doc, y,
+    `Quantidade prescrita: ${pd.bottles} frasco(s) por mês. Receita emitida com validade de 1 (um) ano para garantir a continuidade do tratamento durante eventuais entraves no fornecimento judicial.`,
+    { variant: "legal", title: "Quantidade e validade da prescrição", size: PDF_THEME.font.bodySm, gap: 4 }
+  );
 
-  // ═══ 8. Riscos da Interrupção ═══
+  // ─── 8. Riscos da Interrupção ───
   if (answers.riscos_interrupcao || answers.urgencia === "sim" || answers.urgencia_motivo) {
-    writeSectionHeader(8, "Riscos da Interrupção do Tratamento (Periculum in Mora)");
-    setSmall();
-    writeParagraph(
-      "Esta seção fundamenta o pedido de tutela de urgência (liminar) por demonstrar o risco concreto à saúde do paciente caso o tratamento seja interrompido ou postergado.",
-      { size: 8, color: [80, 80, 80], gap: 4 }
+    y = drawSectionHeader(doc, y, "Riscos da interrupção do tratamento (periculum in mora)", { number: 8 });
+    y = drawCallout(doc, y,
+      "Esta seção fundamenta o pedido de tutela de urgência (liminar) ao demonstrar o risco concreto à saúde do paciente em caso de interrupção ou postergação do tratamento.",
+      { variant: "legal", title: "Fundamentação para tutela de urgência", size: PDF_THEME.font.bodySm, gap: 4 }
     );
-    setBody();
-    if (answers.riscos_interrupcao) writeParagraph(answers.riscos_interrupcao);
-    if (answers.urgencia === "sim") writeParagraph("Há urgência clínica reconhecida pelo médico assistente.", { bold: true });
-    if (answers.urgencia_motivo) writeParagraph(`Justificativa da urgência: ${answers.urgencia_motivo}`);
+    if (answers.riscos_interrupcao) {
+      y = writeParagraph(doc, y, answers.riscos_interrupcao, { gap: 2 });
+    }
+    if (answers.urgencia === "sim") {
+      y = writeParagraph(doc, y,
+        "Há urgência clínica reconhecida pelo médico assistente para o início ou a continuidade imediata do tratamento.",
+        { bold: true, gap: 2 }
+      );
+    }
+    if (answers.urgencia_motivo) {
+      y = writeKeyValue(doc, y, "Justificativa específica da urgência", answers.urgencia_motivo, { gap: 2 });
+    }
   }
 
-  // ═══ 9. Hipossuficiência ═══
+  // ─── 9. Hipossuficiência ───
   if (answers.custo_mensal_estimado || answers.hipossuficiencia_observacao) {
-    writeSectionHeader(9, "Custo do Tratamento e Capacidade Financeira");
-    setSmall();
-    writeParagraph(
-      "A comprovação documental da hipossuficiência financeira é responsabilidade do advogado (declaração de rendimentos, IR, comprovantes). A informação abaixo é prestada apenas pelo conhecimento clínico do médico assistente.",
-      { size: 8, color: [80, 80, 80], gap: 4 }
+    y = drawSectionHeader(doc, y, "Custo do tratamento e capacidade financeira", { number: 9 });
+    y = drawCallout(doc, y,
+      "A comprovação documental da hipossuficiência financeira é responsabilidade do advogado (declaração de rendimentos, IR, comprovantes de despesas). As informações abaixo são prestadas pelo conhecimento clínico do médico assistente.",
+      { variant: "info", size: PDF_THEME.font.bodySm, gap: 4 }
     );
-    setBody();
-    if (answers.custo_mensal_estimado) writeParagraph(`Custo mensal estimado do tratamento: ${answers.custo_mensal_estimado}`);
-    if (answers.hipossuficiencia_observacao) writeParagraph(answers.hipossuficiencia_observacao);
+    if (answers.custo_mensal_estimado) {
+      y = writeKeyValue(doc, y, "Custo mensal estimado do tratamento", answers.custo_mensal_estimado, { gap: 2 });
+    }
+    if (answers.hipossuficiencia_observacao) {
+      y = writeParagraph(doc, y, answers.hipossuficiencia_observacao, { gap: 2 });
+    }
   }
 
-  // ═══ 10. Fundamentação Regulatória ═══
-  writeSectionHeader(10, "Fundamentação Regulatória");
-  setSmall();
-  writeParagraph(
+  // ─── 10. Fundamentação Regulatória ───
+  y = drawSectionHeader(doc, y, "Fundamentação regulatória", { number: 10 });
+  y = drawCallout(doc, y,
     "Esta seção atende ao requisito (iii) do Tema 106 do STJ, na forma do Tema 1161 do STF: o medicamento, embora sem registro em listas de dispensação do SUS, possui importação autorizada pela ANVISA por pessoa física para uso próprio mediante prescrição médica.",
-    { size: 8, color: [80, 80, 80], gap: 4 }
+    { variant: "legal", title: "Tema 106 STJ · Tema 1161 STF", size: PDF_THEME.font.bodySm, gap: 4 }
   );
-  setBody();
-  writeParagraph(
-    "O produto prescrito é regularmente importado por pessoa física para uso próprio, sob prescrição médica, conforme regulamentação da ANVISA. A regulamentação vigente permite a importação para fins terapêuticos, com a devida autorização sanitária individual."
+  y = writeParagraph(doc, y,
+    "O produto prescrito é regularmente importado por pessoa física para uso próprio, sob prescrição médica, conforme regulamentação da ANVISA. A regulamentação vigente permite a importação para fins terapêuticos com a devida autorização sanitária individual.",
+    { gap: 2 }
   );
-  if (answers.anvisa_autorizacao === "sim") writeParagraph("O paciente já possui autorização de importação ANVISA vigente.");
-  else if (answers.anvisa_autorizacao === "solicitando") writeParagraph("A autorização de importação ANVISA está em processo de solicitação.");
-  else if (answers.anvisa_autorizacao === "nao") writeParagraph("A autorização de importação ANVISA será solicitada após a confirmação do tratamento.");
-  if (answers.anvisa_processo) writeParagraph(`Número do processo ANVISA: ${answers.anvisa_processo}`);
+  if (answers.anvisa_autorizacao === "sim") {
+    y = writeParagraph(doc, y, "O paciente já possui autorização de importação ANVISA vigente.", { gap: 2 });
+  } else if (answers.anvisa_autorizacao === "solicitando") {
+    y = writeParagraph(doc, y, "A autorização de importação ANVISA está em processo de solicitação.", { gap: 2 });
+  } else if (answers.anvisa_autorizacao === "nao") {
+    y = writeParagraph(doc, y, "A autorização de importação ANVISA será solicitada após a confirmação do tratamento.", { gap: 2 });
+  }
+  if (answers.anvisa_processo) {
+    y = writeKeyValue(doc, y, "Número do processo ANVISA", answers.anvisa_processo, { gap: 2 });
+  }
 
-  // ═══ 11. Informações Adicionais (campos personalizados) ═══
-  // Inclui apenas se o médico adicionou pelo menos um campo personalizado preenchido.
+  // ─── 11. Informações Adicionais (campos personalizados do médico) ───
   const filledCustomFields = (customFields || []).filter((f) => f.value && f.value.trim());
   let conclusionNumber = 11;
   if (filledCustomFields.length > 0) {
-    writeSectionHeader(11, "Informações Adicionais Relatadas pelo Médico Assistente");
-    setSmall();
-    writeParagraph(
+    y = drawSectionHeader(doc, y, "Informações adicionais relatadas pelo médico assistente", { number: 11 });
+    y = drawCallout(doc, y,
       "Os itens abaixo foram acrescentados pelo médico assistente para detalhar aspectos do caso que não estão cobertos pelas seções anteriores.",
-      { size: 8, color: [80, 80, 80], gap: 4 }
+      { variant: "info", size: PDF_THEME.font.bodySm, gap: 4 }
     );
-    setBody();
     filledCustomFields.forEach((field) => {
-      writeParagraph(field.label.endsWith(":") || field.label.endsWith("?") ? field.label : `${field.label}:`, { bold: true, gap: 1 });
-      writeParagraph(field.value);
+      const labelClean = field.label.replace(/[:?]+\s*$/, "");
+      y = writeKeyValue(doc, y, labelClean, field.value, { gap: 2 });
     });
     conclusionNumber = 12;
   }
 
-  // ═══ Conclusão (numeração depende da existência de campos personalizados) ═══
-  writeSectionHeader(conclusionNumber, "Conclusão e Declaração de Imprescindibilidade");
+  // ─── Conclusão ───
+  y = drawSectionHeader(doc, y, "Conclusão e declaração de imprescindibilidade", { number: conclusionNumber });
   if (answers.conclusao_texto) {
-    writeParagraph(answers.conclusao_texto);
+    y = writeParagraph(doc, y, answers.conclusao_texto, { gap: 2 });
   } else {
-    // Fallback se médico não preencher
-    writeParagraph(
-      `Pelo exposto, ATESTO que o tratamento com ${pd.productFullLabel} é IMPRESCINDÍVEL para o paciente acima identificado, dado o quadro clínico apresentado, a falha das alternativas terapêuticas disponíveis no SUS e o perfil de segurança e eficácia do canabidiol nas condições deste paciente. A interrupção ou ausência de acesso ao tratamento implicará prejuízo grave e potencialmente irreversível à sua saúde, conforme detalhado nas seções anteriores.`
+    y = writeParagraph(doc, y,
+      `Pelo exposto, ATESTO que o tratamento com ${pd.productFullLabel} é IMPRESCINDÍVEL para o paciente acima identificado, considerando o quadro clínico apresentado, a falha das alternativas terapêuticas disponíveis no SUS e o perfil de segurança e eficácia do canabidiol nas condições deste paciente. A interrupção ou ausência de acesso ao tratamento implicará prejuízo grave e potencialmente irreversível à sua saúde, conforme detalhado nas seções anteriores.`,
+      { gap: 2 }
     );
   }
   if (answers.observacoes_finais) {
-    writeParagraph("Observações adicionais:", { bold: true, gap: 1 });
-    writeParagraph(answers.observacoes_finais);
+    y = writeParagraph(doc, y, "Observações adicionais:", { bold: true, gap: 1 });
+    y = writeParagraph(doc, y, answers.observacoes_finais, { gap: 2 });
   }
 
-  // ═══ Assinatura ═══
-  ensureSpace(45);
-  y += 8;
-  doc.setDrawColor(80);
-  doc.setLineWidth(0.3);
-  doc.line(M, y, M + 100, y);
-  y += 5;
-  setBody();
-  writeParagraph(`Dr(a). ${doctor.full_name}`, { gap: 1, bold: true });
-  writeParagraph(`${doctor.specialty} — CRM: ${doctor.crm}`, { gap: 1 });
-  if (doctor.phone) writeParagraph(`Tel.: ${doctor.phone}`, { gap: 1 });
-  y += 3;
-  setSmall();
-  writeParagraph(`Local e data: ____________________________, ${new Date().toLocaleDateString("pt-BR")}`, { size: 9 });
-
-  // ═══ Rodapé jurídico ═══
-  ensureSpace(20);
-  y += 6;
-  doc.setDrawColor(29, 158, 117);
-  doc.setLineWidth(0.3);
-  doc.line(M, y, pw - M, y);
-  y += 4;
-  setSmall();
-  writeParagraph(
-    "Este relatório foi elaborado em atendimento aos requisitos do Tema 106 do STJ (REsp 1.657.156/RJ) e do Tema 1161 do STF (RE 1.165.959), para instrução de pleito judicial de fornecimento de medicamento à base de canabidiol.",
-    { size: 7, color: [120, 120, 120] }
+  // ─── Assinatura ───
+  y = writeParagraph(doc, y,
+    `Local e data: _______________________________________________, ${new Date().toLocaleDateString("pt-BR")}`,
+    { size: PDF_THEME.font.bodySm, color: PDF_THEME.color.textMuted, gap: 4 }
   );
+  y = drawSignatureBlock(doc, y, { doctor, align: "center" });
 
-  // Numeração de páginas
-  const pageCount = doc.getNumberOfPages();
-  for (let i = 1; i <= pageCount; i++) {
-    doc.setPage(i);
-    doc.setFontSize(8);
-    doc.setTextColor(150);
-    doc.text(`Página ${i} de ${pageCount}`, pw - M, ph - 8, { align: "right" });
-    doc.text(`Relatório Médico — ${patient.full_name} — ${new Date().toLocaleDateString("pt-BR")}`, M, ph - 8);
-  }
+  // ─── Rodapé padronizado ───
+  drawPageFooter(doc, {
+    text: `Relatório Médico · ${patient.full_name}`,
+    doctorName: doctor.full_name,
+    doctorCrm: doctor.crm,
+  });
 
   doc.save(`relatorio_medico_${patient.full_name.replace(/\s/g, "_")}_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
+
