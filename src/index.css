@@ -2,84 +2,124 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ═══════════════════════════════════════════════════════════════════
+   GREENLION PRECISION — DESIGN TOKENS
+   Aesthetic: editorial clínico contemporâneo.
+   Refs: Linear (densidade), Doctolib (autoridade), Stripe (dados),
+         NEJM/Lancet (tipografia editorial).
+   ═══════════════════════════════════════════════════════════════════ */
+
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 150 10% 15%;
+    /* ── Paleta institucional ───────────────────────────────── */
+    /* Fundo creme/papel — não branco puro, transmite materialidade */
+    --background: 38 33% 97%;       /* #FAF8F4 */
+    --foreground: 145 12% 11%;      /* #1A1F1B */
+
+    /* Camadas de superfície */
+    --surface: 0 0% 100%;           /* branco puro para cards elevados */
+    --surface-2: 145 14% 95%;       /* #ECF0ED */
+    --surface-3: 145 12% 90%;       /* #DDE5DF */
 
     --card: 0 0% 100%;
-    --card-foreground: 150 10% 15%;
+    --card-foreground: 145 12% 11%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 150 10% 15%;
+    --popover-foreground: 145 12% 11%;
 
-    --primary: 158 70% 36%;
-    --primary-foreground: 0 0% 100%;
+    /* Verde Greenlion institucional — mais escuro, mais autoridade */
+    --primary: 158 58% 24%;         /* #1B5E48 */
+    --primary-foreground: 38 33% 97%;
+    --primary-soft: 158 30% 92%;    /* #DCE8E1 — fundo de chip primary */
 
-    --secondary: 158 30% 94%;
-    --secondary-foreground: 158 70% 20%;
+    /* Tinta institucional alternativa — verde-musgo */
+    --ink: 145 18% 16%;             /* #21302A */
+    --ink-soft: 145 8% 35%;         /* #525C56 */
 
-    --muted: 150 10% 96%;
-    --muted-foreground: 150 5% 45%;
+    --secondary: 145 14% 95%;       /* mesmo que surface-2 */
+    --secondary-foreground: 145 18% 16%;
 
-    --accent: 158 30% 94%;
-    --accent-foreground: 158 70% 20%;
+    --muted: 38 20% 94%;            /* fundo de input neutro creme */
+    --muted-foreground: 145 8% 40%; /* #5C6660 */
 
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
+    --accent: 158 30% 92%;
+    --accent-foreground: 158 58% 24%;
 
-    --border: 150 10% 90%;
-    --input: 150 10% 90%;
-    --ring: 158 70% 36%;
+    /* Status semânticos — terrosos, não saturados de SaaS */
+    --destructive: 8 60% 40%;        /* #A02E26 — vermelho-tijolo */
+    --destructive-foreground: 38 33% 97%;
+    --warning: 35 75% 38%;           /* #B45309 — âmbar queimado */
+    --warning-foreground: 38 33% 97%;
+    --success: 158 58% 24%;          /* mesmo que primary, coerente */
+    --success-foreground: 38 33% 97%;
+    --info: 210 35% 32%;             /* #345974 — azul tinta */
+    --info-foreground: 38 33% 97%;
+
+    /* Linhas e bordas */
+    --border: 145 14% 86%;          /* #D2DAD5 — borda visível mas sutil */
+    --border-strong: 145 14% 72%;   /* para inputs em foco/header */
+    --input: 145 14% 86%;
+    --ring: 158 58% 24%;
 
     --radius: 0.5rem;
 
-    --sidebar-background: 158 30% 97%;
-    --sidebar-foreground: 150 10% 25%;
-    --sidebar-primary: 158 70% 36%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 158 20% 93%;
-    --sidebar-accent-foreground: 150 10% 25%;
-    --sidebar-border: 150 10% 90%;
-    --sidebar-ring: 158 70% 36%;
+    /* Sidebar — cor própria pra criar profundidade */
+    --sidebar-background: 38 30% 96%;
+    --sidebar-foreground: 145 12% 25%;
+    --sidebar-primary: 158 58% 24%;
+    --sidebar-primary-foreground: 38 33% 97%;
+    --sidebar-accent: 145 18% 90%;
+    --sidebar-accent-foreground: 158 58% 24%;
+    --sidebar-border: 145 14% 84%;
+    --sidebar-ring: 158 58% 24%;
+
+    /* Tipografia — pilhas ricas */
+    --font-display: "Fraunces", "Iowan Old Style", "Apple Garamond", Georgia, serif;
+    --font-sans: "Inter Tight", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: "JetBrains Mono", "SF Mono", "Menlo", "Consolas", monospace;
   }
 
   .dark {
-    --background: 150 15% 6%;
-    --foreground: 150 5% 95%;
-
-    --card: 150 15% 8%;
-    --card-foreground: 150 5% 95%;
-
-    --popover: 150 15% 8%;
-    --popover-foreground: 150 5% 95%;
-
-    --primary: 158 70% 36%;
-    --primary-foreground: 0 0% 100%;
-
-    --secondary: 150 15% 15%;
-    --secondary-foreground: 150 5% 95%;
-
-    --muted: 150 15% 15%;
-    --muted-foreground: 150 5% 60%;
-
-    --accent: 150 15% 15%;
-    --accent-foreground: 150 5% 95%;
-
-    --destructive: 0 63% 31%;
-    --destructive-foreground: 0 0% 100%;
-
-    --border: 150 15% 18%;
-    --input: 150 15% 18%;
-    --ring: 158 70% 36%;
-    --sidebar-background: 150 15% 8%;
-    --sidebar-foreground: 150 5% 95%;
-    --sidebar-primary: 158 70% 36%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 150 15% 12%;
-    --sidebar-accent-foreground: 150 5% 95%;
-    --sidebar-border: 150 15% 18%;
-    --sidebar-ring: 158 70% 36%;
+    --background: 145 18% 8%;
+    --foreground: 38 20% 92%;
+    --surface: 145 18% 11%;
+    --surface-2: 145 14% 14%;
+    --surface-3: 145 14% 18%;
+    --card: 145 18% 11%;
+    --card-foreground: 38 20% 92%;
+    --popover: 145 18% 11%;
+    --popover-foreground: 38 20% 92%;
+    --primary: 158 50% 50%;
+    --primary-foreground: 145 30% 8%;
+    --primary-soft: 158 30% 18%;
+    --ink: 38 20% 92%;
+    --ink-soft: 145 8% 65%;
+    --secondary: 145 14% 14%;
+    --secondary-foreground: 38 20% 92%;
+    --muted: 145 14% 14%;
+    --muted-foreground: 145 8% 60%;
+    --accent: 145 14% 16%;
+    --accent-foreground: 38 20% 92%;
+    --destructive: 8 60% 50%;
+    --destructive-foreground: 38 20% 92%;
+    --warning: 35 75% 50%;
+    --warning-foreground: 145 30% 8%;
+    --success: 158 50% 50%;
+    --success-foreground: 145 30% 8%;
+    --info: 210 50% 60%;
+    --info-foreground: 145 30% 8%;
+    --border: 145 14% 20%;
+    --border-strong: 145 14% 28%;
+    --input: 145 14% 20%;
+    --ring: 158 50% 50%;
+    --sidebar-background: 145 18% 9%;
+    --sidebar-foreground: 38 20% 90%;
+    --sidebar-primary: 158 50% 50%;
+    --sidebar-primary-foreground: 145 30% 8%;
+    --sidebar-accent: 145 14% 14%;
+    --sidebar-accent-foreground: 38 20% 92%;
+    --sidebar-border: 145 14% 18%;
+    --sidebar-ring: 158 50% 50%;
   }
 }
 
@@ -88,7 +128,113 @@
     @apply border-border;
   }
 
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv11", "cv05";
+    /* Numerais com altura fixa = tabelas alinhadas */
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.005em;
+  }
+
+  /* Headings sempre na fonte serif editorial */
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+    font-feature-settings: "ss01";
+    letter-spacing: -0.018em;
+  }
+
+  /* Numerais e códigos sempre em mono */
+  .num, code, kbd, .font-mono {
+    font-family: var(--font-mono);
+    font-feature-settings: "ss01", "ss03";
+  }
+
+  /* Scrollbar discreta clínica */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border-strong));
+    border-radius: 9999px;
+    border: 2px solid hsl(var(--background));
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground));
+  }
+}
+
+@layer components {
+  /* Eyebrow — texto pequeno em maiúscula sobre uma seção */
+  .eyebrow {
+    @apply text-[11px] uppercase font-semibold tracking-[0.14em] text-ink-soft;
+  }
+
+  /* Lead — primeiro parágrafo, hierarquia mais forte */
+  .lead {
+    font-family: var(--font-display);
+    font-size: 1.0625rem;
+    line-height: 1.55;
+    color: hsl(var(--ink));
+  }
+
+  /* Botão keyboard shortcut */
+  .kbd {
+    @apply inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded border border-border bg-surface px-1.5 font-mono text-[10px] font-medium text-ink-soft;
+  }
+
+  /* Chip de status */
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none;
+  }
+  .chip-primary {
+    @apply chip border-primary/30 bg-primary-soft text-primary;
+  }
+  .chip-warning {
+    @apply chip border-warning/30 bg-warning/10 text-warning;
+  }
+  .chip-info {
+    @apply chip border-info/30 bg-info/10 text-info;
+  }
+  .chip-muted {
+    @apply chip border-border bg-muted text-muted-foreground;
+  }
+
+  /* Card editorial — usa nas superfícies elevadas que precisam respirar */
+  .card-editorial {
+    @apply rounded-lg border border-border bg-surface;
+    box-shadow:
+      0 1px 0 hsl(var(--border) / 0.5),
+      0 1px 2px hsl(0 0% 0% / 0.02);
+  }
+
+  /* Texto técnico — para CRM, CPF, dosagens */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Página com max-width consistente, padding generoso para desktop */
+  .page-content {
+    @apply mx-auto w-full px-8 py-8;
+    max-width: 1320px;
+  }
+
+  /* Listras sutis na frente de uma sub-seção (como índice de jornal) */
+  .section-marker {
+    @apply relative pl-4;
+  }
+  .section-marker::before {
+    content: "";
+    @apply absolute left-0 top-1.5 h-4 w-1 rounded-full bg-primary;
   }
 }

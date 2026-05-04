@@ -23,6 +23,8 @@ import { type AnamneseAnswers, type CustomAnamneseField, emptyAnamneseAnswers } 
 import { generatePrescriptionPDF, generatePatientGuidePDF, generateLegalReportPDF } from "@/lib/pdfGenerator";
 import { ScientificReferencesCard } from "@/components/ScientificReferencesCard";
 import { AnamneseForm } from "@/components/AnamneseForm";
+import { AppShell } from "@/components/AppShell";
+import { cn } from "@/lib/utils";
 
 interface Patient {
   id: string;
@@ -310,38 +312,103 @@ export default function Prescription() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-      </div>
+      <AppShell pageTitle="Carregando…">
+        <div className="card-editorial p-12 text-center">
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
+        </div>
+      </AppShell>
     );
   }
 
   if (!patient) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p>Paciente não encontrado.</p>
-      </div>
+      <AppShell pageTitle="Paciente não encontrado">
+        <div className="card-editorial p-12 text-center">
+          <p className="text-[14px] text-ink-soft">
+            O paciente solicitado não foi encontrado em sua conta.
+          </p>
+          <Button onClick={() => navigate("/")} className="mt-5">
+            Voltar para a lista
+          </Button>
+        </div>
+      </AppShell>
     );
   }
 
   const weight = patient.weight || 0;
   const doseRange = selectedPathology ? getDoseRange(selectedPathology, weight) : null;
 
-  return (
-    <div className="min-h-screen bg-secondary/20 p-4">
-      <div className="mx-auto max-w-4xl">
-        <Button variant="ghost" onClick={() => navigate("/")} className="mb-4">
-          <ArrowLeft className="h-4 w-4 mr-1" /> Voltar ao Dashboard
-        </Button>
+  const STEP_LABELS = ["Médico", "Paciente", "Finalidade", "Patologia", "Produto", "Posologia", "Revisão"];
+  const totalSteps = 6;
 
-        {/* Progress */}
-        <div className="mb-6 flex items-center gap-1">
-          {[1, 2, 3, 4, 5, 6].map((s) => (
-            <div key={s} className={`h-2 flex-1 rounded-full ${s <= step ? "bg-primary" : "bg-border"}`} />
-          ))}
+  return (
+    <AppShell
+      pageEyebrow="Nova prescrição"
+      pageTitle={`Receita para ${patient.full_name}`}
+      pageDescription={
+        <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px]">
+          <span>
+            <span className="font-mono">CPF {patient.cpf}</span>
+            {patient.weight && <> · <span className="font-mono tabular">{patient.weight} kg</span></>}
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 text-warning text-[11px]">
+            <AlertTriangle className="h-3 w-3" />
+            Sugestões baseadas em literatura. O médico tem autonomia para ajustar.
+          </span>
+        </span>
+      }
+      breadcrumbs={[
+        { label: "Pacientes", href: "/" },
+        { label: patient.full_name, href: `/pacientes/${patient.id}/historico` },
+        { label: "Nova receita" },
+      ]}
+    >
+      <div className="mx-auto max-w-4xl">
+        {/* ─── Stepper editorial ─── */}
+        <div className="card-editorial mb-6 px-5 py-4">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="eyebrow">Progresso da prescrição</p>
+            <p className="font-mono text-[11.5px] tabular text-ink-soft">
+              Etapa {step} de {totalSteps}
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {Array.from({ length: totalSteps }, (_, i) => i + 1).map((s) => {
+              const done = s < step;
+              const active = s === step;
+              return (
+                <div
+                  key={s}
+                  className="flex flex-1 items-center gap-1.5"
+                  aria-current={active ? "step" : undefined}
+                >
+                  <div
+                    className={cn(
+                      "h-1.5 flex-1 rounded-full transition-colors",
+                      done && "bg-primary",
+                      active && "bg-primary",
+                      !done && !active && "bg-border"
+                    )}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-2.5 hidden grid-cols-7 text-[10.5px] text-ink-soft sm:grid">
+            {STEP_LABELS.map((lbl, i) => (
+              <span
+                key={lbl}
+                className={cn(
+                  "uppercase tracking-wider",
+                  i + 1 === step && "font-semibold text-primary",
+                  i + 1 < step && "text-foreground"
+                )}
+              >
+                {i + 1}. {lbl}
+              </span>
+            ))}
+          </div>
         </div>
-        <p className="text-sm text-muted-foreground mb-2">Etapa {step} de 6</p>
-        <p className="text-xs text-muted-foreground italic mb-4">⚕ Todas as sugestões são baseadas em literatura clínica. O médico tem autonomia total para ajustar qualquer valor.</p>
 
         {/* ═══ Step 1: Médico ═══ */}
         {step === 1 && (
@@ -1069,6 +1136,6 @@ export default function Prescription() {
           </Card>
         )}
       </div>
-    </div>
+    </AppShell>
   );
 }
