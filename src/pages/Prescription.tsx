@@ -19,8 +19,10 @@ import {
   type PathologyInfo, type Product, type TitulationStep, type TitulationConfig,
 } from "@/lib/prescriptionData";
 import { PRESCRIPTION_PURPOSES, type PrescriptionPurpose } from "@/lib/prescriptionPurpose";
+import { type AnamneseAnswers, emptyAnamneseAnswers } from "@/lib/anamneseSchema";
 import { generatePrescriptionPDF, generatePatientGuidePDF } from "@/lib/pdfGenerator";
 import { ScientificReferencesCard } from "@/components/ScientificReferencesCard";
+import { AnamneseForm } from "@/components/AnamneseForm";
 
 interface Patient {
   id: string;
@@ -47,6 +49,7 @@ export default function Prescription() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [purpose, setPurpose] = useState<PrescriptionPurpose | null>(null);
+  const [anamneseAnswers, setAnamneseAnswers] = useState<AnamneseAnswers>(emptyAnamneseAnswers());
   const [patient, setPatient] = useState<Patient | null>(null);
   const [doctor, setDoctor] = useState<DoctorProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -674,8 +677,8 @@ export default function Prescription() {
                 <Button
                   onClick={() => {
                     if (purpose === "JUDICIALIZACAO" && selectedProduct && selectedPathology) {
-                      // Em judicialização: dose máxima fixa, validade 1 ano, sem titulação.
-                      // Calcula gotas/dose dividindo a dose-alvo diária por 2 tomadas.
+                      // Em judicialização, pré-calcula a dose máxima e validade de 1 ano.
+                      // O Step 6 será a Anamnese Expandida (não a Posologia padrão).
                       const range = getDoseRange(selectedPathology, weight);
                       const maxMgDay = range.max;
                       const dropsPerDay = mgDayToDropsDay(maxMgDay, selectedProduct);
@@ -684,14 +687,11 @@ export default function Prescription() {
                       setInitialDrops(dropsPerDose);
                       setIncrement(0);
                       setIntervalDays(0);
-                      // Validade da receita: 1 ano
                       const oneYear = new Date();
                       oneYear.setFullYear(oneYear.getFullYear() + 1);
                       setReturnDate(oneYear.toISOString().slice(0, 10));
-                      setStep(7); // pula posologia
-                    } else {
-                      setStep(6);
                     }
+                    setStep(6);
                   }}
                   disabled={!selectedProduct}
                 >
@@ -702,8 +702,26 @@ export default function Prescription() {
           </Card>
         )}
 
-        {/* ═══ Step 6: Posologia ═══ */}
-        {step === 6 && selectedProduct && (
+        {/* ═══ Step 6: Posologia (compra direta) | Anamnese Expandida (judicialização) ═══ */}
+        {step === 6 && selectedProduct && purpose === "JUDICIALIZACAO" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>6. Anamnese Expandida</CardTitle>
+              <CardDescription>
+                Preencha os campos abaixo para gerar o Relatório Médico Circunstanciado (Tema 106 STJ + Tema 1161 STF). Quanto mais detalhado, maior a chance de tutela de urgência ser concedida.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <AnamneseForm answers={anamneseAnswers} onChange={setAnamneseAnswers} />
+              <div className="flex justify-between">
+                <Button variant="outline" onClick={() => setStep(5)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
+                <Button onClick={() => setStep(7)}>Próximo <ArrowRight className="h-4 w-4 ml-1" /></Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {step === 6 && selectedProduct && purpose !== "JUDICIALIZACAO" && (
           <Card>
             <CardHeader>
               <CardTitle>6. Posologia</CardTitle>
@@ -940,7 +958,7 @@ export default function Prescription() {
               </div>
 
               <div className="flex justify-between">
-                <Button variant="outline" onClick={() => setStep(purpose === "JUDICIALIZACAO" ? 5 : 6)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
+                <Button variant="outline" onClick={() => setStep(6)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
                 <Button onClick={() => navigate(`/pacientes/${patient.id}/historico`)}>
                   Finalizar Prescrição
                 </Button>
