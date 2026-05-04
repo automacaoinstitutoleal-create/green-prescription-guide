@@ -36,6 +36,9 @@ interface PrescriptionInfo {
   productFullLabel: string;
   productComposition: string;
   receituarioType: string;
+  /** When true, the prescription is for legal/judicial purposes:
+   * dose máxima fixa, validade 1 ano, sem titulação. */
+  isLegalCase?: boolean;
 }
 
 interface GuideScheduleStep {
@@ -236,18 +239,29 @@ export function generatePrescriptionPDF({ doctor, patient, prescriptionData: pd 
     "",
   ];
 
-  // Build titration weeks
-  const titSteps = pd.titulationSteps.filter(s => s.status === "titulação");
-  titSteps.forEach(s => {
-    posLines.push(`${s.days}: ${s.dropsPerDose} gotas por dose · ${s.mgCbdPerDose}mg CBD/dose`);
-  });
-  const maintStep = pd.titulationSteps.find(s => s.status === "manutenção");
-  if (maintStep) {
-    posLines.push(`A partir do ${maintStep.days.replace("Dia ", "dia ").replace("+", "")}: ${maintStep.dropsPerDose} gotas por dose · ${maintStep.mgCbdPerDose}mg CBD/dose — até retorno médico.`);
+  if (pd.isLegalCase) {
+    // Em judicialização: dose máxima fixa, sem titulação.
+    const drops = cfg.maintenanceDrops;
+    const mgCbd = +(drops * pd.mgCbdPerDrop).toFixed(1);
+    const mgCan = +(drops * pd.mgPerDrop).toFixed(1);
+    posLines.push(`${drops} gota(s) por dose · ${mgCbd} mg de CBD por dose · ${mgCan} mg de canabinoides totais por dose.`);
+    posLines.push(`Dose diária: ${+(mgCbd * 2).toFixed(1)} mg de CBD / ${+(mgCan * 2).toFixed(1)} mg de canabinoides totais.`);
+  } else {
+    // Compra direta: protocolo de titulação detalhado.
+    const titSteps = pd.titulationSteps.filter(s => s.status === "titulação");
+    titSteps.forEach(s => {
+      posLines.push(`${s.days}: ${s.dropsPerDose} gotas por dose · ${s.mgCbdPerDose}mg CBD/dose`);
+    });
+    const maintStep = pd.titulationSteps.find(s => s.status === "manutenção");
+    if (maintStep) {
+      posLines.push(`A partir do ${maintStep.days.replace("Dia ", "dia ").replace("+", "")}: ${maintStep.dropsPerDose} gotas por dose · ${maintStep.mgCbdPerDose}mg CBD/dose — até retorno médico.`);
+    }
   }
   posLines.push("");
   posLines.push(`Cada gota ≈ ${pd.mgPerDrop}mg canabinoides totais · ${pd.mgCbdPerDrop}mg CBD.`);
-  posLines.push(`Cronograma completo no Guia do Paciente.`);
+  if (!pd.isLegalCase) {
+    posLines.push(`Cronograma completo no Guia do Paciente.`);
+  }
 
   posLines.forEach(l => {
     y = checkPageBreak(doc, y, 5);
@@ -260,13 +274,22 @@ export function generatePrescriptionPDF({ doctor, patient, prescriptionData: pd 
   doc.setFont("helvetica", "bold");
   doc.text("QUANTIDADE", 20, y); y += 6;
   doc.setFont("helvetica", "normal");
-  doc.text(`${pd.bottles} frasco(s) de 30ml — duração: 30 dias até retorno médico.`, 20, y); y += 10;
+  if (pd.isLegalCase) {
+    doc.text(`${pd.bottles} frasco(s) de 30ml por mês — uso contínuo.`, 20, y); y += 5;
+    doc.text(`Validade da prescrição: 1 (um) ano a partir da data de emissão.`, 20, y); y += 10;
+  } else {
+    doc.text(`${pd.bottles} frasco(s) de 30ml — duração: 30 dias até retorno médico.`, 20, y); y += 10;
+  }
 
   // Retorno obrigatório
   y = checkPageBreak(doc, y, 15);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
-  doc.text("Retorno obrigatório em 30 dias para avaliação e continuidade do ajuste de dose.", 20, y);
+  if (pd.isLegalCase) {
+    doc.text("Acompanhamento médico mínimo: a cada 90 dias para reavaliação clínica.", 20, y);
+  } else {
+    doc.text("Retorno obrigatório em 30 dias para avaliação e continuidade do ajuste de dose.", 20, y);
+  }
   y += 10;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
@@ -563,4 +586,289 @@ Manter fora do alcance de crianças.`;
   writePara("Este guia é complementar à receita médica. Guarde os dois documentos juntos.", { size: 8 });
 
   doc.save(`guia_paciente_${patient.full_name.replace(/\s/g, "_")}_${new Date().toISOString().slice(0, 10)}.pdf`);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// RELATÓRIO MÉDICO CIRCUNSTANCIADO — Judicialização
+//
+// Gerado a partir das respostas da Anamnese Expandida.
+// Atende:
+//  • Tema 106 STJ (REsp 1.657.156/RJ): laudo fundamentado e circunstanciado
+//  • Tema 1161 STF (RE 1.165.959): produto sem registro com importação ANVISA
+// ═══════════════════════════════════════════════════════════════════
+
+interface AnamneseAnswersForPdf {
+  [key: string]: string;
+}
+
+interface LegalReportParams {
+  doctor: DoctorInfo;
+  patient: PatientInfo;
+  prescriptionData: PrescriptionInfo;
+  product: Product;
+  answers: AnamneseAnswersForPdf;
+  /** Patient's age computed at the time of report. */
+  patientAge?: number | null;
+}
+
+export function generateLegalReportPDF({ doctor, patient, prescriptionData: pd, product, answers, patientAge }: LegalReportParams) {
+  const doc = new jsPDF();
+  const pw = doc.internal.pageSize.getWidth();
+  const ph = doc.internal.pageSize.getHeight();
+  const M = 18;
+  const CONTENT_W = pw - 2 * M;
+  let y = M;
+
+  // Helpers
+  const setHeading = () => { doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(29, 78, 60); };
+  const setBody = () => { doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(20); };
+  const setSmall = () => { doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(80); };
+
+  const ensureSpace = (needed: number) => {
+    if (y + needed > ph - 20) {
+      doc.addPage();
+      y = M;
+    }
+  };
+
+  const writeParagraph = (text: string, opts?: { gap?: number; bold?: boolean; size?: number; color?: number[] }) => {
+    if (!text || !text.trim()) return;
+    const gap = opts?.gap ?? 4;
+    const size = opts?.size ?? 10;
+    const color = opts?.color ?? [20, 20, 20];
+    doc.setFont("helvetica", opts?.bold ? "bold" : "normal");
+    doc.setFontSize(size);
+    doc.setTextColor(color[0], color[1], color[2]);
+    const lines = doc.splitTextToSize(text, CONTENT_W);
+    ensureSpace(lines.length * (size * 0.4) + 2);
+    doc.text(lines, M, y);
+    y += lines.length * (size * 0.4) + gap;
+  };
+
+  const writeSectionHeader = (n: number, title: string) => {
+    ensureSpace(14);
+    setHeading();
+    doc.text(`${n}. ${title.toUpperCase()}`, M, y);
+    y += 2;
+    doc.setDrawColor(29, 158, 117);
+    doc.setLineWidth(0.4);
+    doc.line(M, y, pw - M, y);
+    y += 5;
+    setBody();
+  };
+
+  // ═══ Cabeçalho ═══
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(14);
+  doc.setTextColor(29, 78, 60);
+  doc.text("RELATÓRIO MÉDICO CIRCUNSTANCIADO", pw / 2, y, { align: "center" });
+  y += 6;
+  doc.setFontSize(10);
+  doc.setTextColor(80);
+  doc.text("Pleito de fornecimento de medicamento — Tema 106 STJ / Tema 1161 STF", pw / 2, y, { align: "center" });
+  y += 8;
+  doc.setDrawColor(29, 158, 117);
+  doc.setLineWidth(0.6);
+  doc.line(M, y, pw - M, y);
+  y += 7;
+
+  // ═══ Identificação do Médico ═══
+  setHeading();
+  doc.text("IDENTIFICAÇÃO DO MÉDICO ASSISTENTE", M, y); y += 5;
+  setBody();
+  writeParagraph(`Dr(a). ${doctor.full_name}`, { gap: 2, bold: true });
+  writeParagraph(`${doctor.specialty} — CRM: ${doctor.crm}`, { gap: 2 });
+  if (doctor.address) writeParagraph(`Endereço profissional: ${doctor.address}`, { gap: 2 });
+  if (doctor.phone) writeParagraph(`Telefone: ${doctor.phone}`, { gap: 2 });
+  if (doctor.email) writeParagraph(`E-mail: ${doctor.email}`, { gap: 2 });
+  y += 3;
+
+  // ═══ Identificação do Paciente ═══
+  setHeading();
+  doc.text("IDENTIFICAÇÃO DO PACIENTE", M, y); y += 5;
+  setBody();
+  writeParagraph(`Nome: ${patient.full_name}`, { gap: 2, bold: true });
+  writeParagraph(`CPF: ${patient.cpf}${patient.rg ? ` · RG: ${patient.rg}` : ""}`, { gap: 2 });
+  if (patient.birth_date) {
+    const dob = new Date(patient.birth_date).toLocaleDateString("pt-BR");
+    writeParagraph(`Data de nascimento: ${dob}${patientAge != null ? ` (${patientAge} anos)` : ""}`, { gap: 2 });
+  }
+  if (patient.weight) writeParagraph(`Peso: ${patient.weight} kg`, { gap: 2 });
+  if (patient.address) writeParagraph(`Endereço: ${patient.address}`, { gap: 2 });
+  y += 4;
+
+  // ═══ 1. História da Doença Atual ═══
+  writeSectionHeader(1, "História da Doença Atual");
+  if (answers.inicio_sintomas) writeParagraph(`Início dos sintomas: ${answers.inicio_sintomas}`);
+  if (answers.evolucao) writeParagraph(`Evolução: ${answers.evolucao}`);
+  if (answers.sintomas_atuais) writeParagraph(`Sintomas atuais: ${answers.sintomas_atuais}`);
+  if (answers.impacto_funcional) writeParagraph(`Impacto funcional: ${answers.impacto_funcional}`);
+  if (answers.exames_realizados) writeParagraph(`Exames complementares: ${answers.exames_realizados}`);
+
+  // ═══ 2. Antecedentes ═══
+  if (answers.comorbidades || answers.alergias || answers.antecedentes_familiares || answers.internacoes) {
+    writeSectionHeader(2, "Antecedentes e Comorbidades");
+    if (answers.comorbidades) writeParagraph(`Comorbidades: ${answers.comorbidades}`);
+    if (answers.alergias) writeParagraph(`Alergias: ${answers.alergias}`);
+    if (answers.antecedentes_familiares) writeParagraph(`Antecedentes familiares: ${answers.antecedentes_familiares}`);
+    if (answers.internacoes) writeParagraph(`Internações/cirurgias: ${answers.internacoes}`);
+  }
+
+  // ═══ 3. Diagnóstico ═══
+  writeSectionHeader(3, "Diagnóstico");
+  writeParagraph(`Patologia: ${pd.pathology}`, { bold: true });
+  writeParagraph(`CID-10: ${pd.cid10}`);
+
+  // ═══ 4. Tratamentos Prévios — CRÍTICO ═══
+  writeSectionHeader(4, "Tratamentos Prévios — Ineficácia e Esgotamento das Alternativas SUS");
+  setSmall();
+  writeParagraph(
+    "Este bloco atende ao requisito (i) do Tema 106 do STJ: comprovação, por meio de laudo médico fundamentado e circunstanciado, da imprescindibilidade do medicamento e da ineficácia, para o tratamento da moléstia, dos fármacos fornecidos pelo SUS.",
+    { size: 8, color: [80, 80, 80], gap: 4 }
+  );
+  setBody();
+  if (answers.tratamentos_lista) writeParagraph(`Histórico de medicamentos e terapias utilizadas:\n${answers.tratamentos_lista}`);
+  if (answers.tentativas_sus) {
+    const text = answers.tentativas_sus === "sim"
+      ? "O paciente já tentou as alternativas terapêuticas oferecidas pelo SUS / RENAME para esta condição."
+      : "As alternativas terapêuticas oferecidas pelo SUS / RENAME não foram adequadas / aplicáveis a este paciente.";
+    writeParagraph(text);
+  }
+  if (answers.ineficacia_sus_justificativa) {
+    writeParagraph("Justificativa de ineficácia ou inadequação dos fármacos do SUS:", { bold: true, gap: 1 });
+    writeParagraph(answers.ineficacia_sus_justificativa);
+  }
+  if (answers.efeitos_adversos_previos) {
+    writeParagraph(`Efeitos adversos significativos com tratamentos anteriores: ${answers.efeitos_adversos_previos}`);
+  }
+
+  // ═══ 5. Justificativa Clínica do Canabidiol ═══
+  writeSectionHeader(5, "Justificativa Clínica para o Tratamento com Canabidiol");
+  if (answers.fundamento_indicacao) writeParagraph(`Fundamento da indicação: ${answers.fundamento_indicacao}`);
+  if (answers.expectativa_resposta) writeParagraph(`Expectativa de resposta: ${answers.expectativa_resposta}`);
+  if (answers.produto_escolhido_justificativa) {
+    writeParagraph("Justificativa do produto específico:", { bold: true, gap: 1 });
+    writeParagraph(answers.produto_escolhido_justificativa);
+  }
+
+  // ═══ 6. Produto Prescrito ═══
+  writeSectionHeader(6, "Produto Prescrito");
+  writeParagraph(pd.productFullLabel, { bold: true });
+  writeParagraph(pd.productComposition);
+
+  // ═══ 7. Protocolo Terapêutico ═══
+  writeSectionHeader(7, "Protocolo Terapêutico Proposto");
+  // Posologia auto-construída a partir dos dados da prescrição
+  const dropsPerDose = pd.config.maintenanceDrops || pd.titulationSteps[pd.titulationSteps.length - 1]?.dropsPerDose || 0;
+  const mgCbdPerDay = +(dropsPerDose * pd.mgCbdPerDrop * 2).toFixed(1);
+  const mgCanPerDay = +(dropsPerDose * pd.mgPerDrop * 2).toFixed(1);
+  writeParagraph(
+    `Posologia: ${dropsPerDose} gota(s) por via ${pd.config.via || "sublingual"}, de 12 em 12 horas (${pd.config.time1 || "08:00"} e ${pd.config.time2 || "20:00"}). ` +
+    `Dose diária estimada: ${mgCanPerDay} mg de canabinoides totais (${mgCbdPerDay} mg de CBD).`
+  );
+  if (pd.patientWeight) {
+    const mgKgDay = +(mgCbdPerDay / pd.patientWeight).toFixed(2);
+    writeParagraph(`Dose por peso: ${mgKgDay} mg/kg/dia (CBD).`);
+  }
+  if (answers.duracao_tratamento) writeParagraph(`Duração estimada: ${answers.duracao_tratamento}`);
+  if (answers.monitoramento) writeParagraph(`Plano de monitoramento: ${answers.monitoramento}`);
+  writeParagraph(`Quantidade prescrita: ${pd.bottles} frasco(s) por mês — receita com validade de 1 (um) ano para garantia de continuidade do tratamento.`, { bold: true });
+
+  // ═══ 8. Riscos da Interrupção ═══
+  if (answers.riscos_interrupcao || answers.urgencia === "sim" || answers.urgencia_motivo) {
+    writeSectionHeader(8, "Riscos da Interrupção do Tratamento (Periculum in Mora)");
+    setSmall();
+    writeParagraph(
+      "Esta seção fundamenta o pedido de tutela de urgência (liminar) por demonstrar o risco concreto à saúde do paciente caso o tratamento seja interrompido ou postergado.",
+      { size: 8, color: [80, 80, 80], gap: 4 }
+    );
+    setBody();
+    if (answers.riscos_interrupcao) writeParagraph(answers.riscos_interrupcao);
+    if (answers.urgencia === "sim") writeParagraph("Há urgência clínica reconhecida pelo médico assistente.", { bold: true });
+    if (answers.urgencia_motivo) writeParagraph(`Justificativa da urgência: ${answers.urgencia_motivo}`);
+  }
+
+  // ═══ 9. Hipossuficiência ═══
+  if (answers.custo_mensal_estimado || answers.hipossuficiencia_observacao) {
+    writeSectionHeader(9, "Custo do Tratamento e Capacidade Financeira");
+    setSmall();
+    writeParagraph(
+      "A comprovação documental da hipossuficiência financeira é responsabilidade do advogado (declaração de rendimentos, IR, comprovantes). A informação abaixo é prestada apenas pelo conhecimento clínico do médico assistente.",
+      { size: 8, color: [80, 80, 80], gap: 4 }
+    );
+    setBody();
+    if (answers.custo_mensal_estimado) writeParagraph(`Custo mensal estimado do tratamento: ${answers.custo_mensal_estimado}`);
+    if (answers.hipossuficiencia_observacao) writeParagraph(answers.hipossuficiencia_observacao);
+  }
+
+  // ═══ 10. Fundamentação Regulatória ═══
+  writeSectionHeader(10, "Fundamentação Regulatória");
+  setSmall();
+  writeParagraph(
+    "Esta seção atende ao requisito (iii) do Tema 106 do STJ, na forma do Tema 1161 do STF: o medicamento, embora sem registro em listas de dispensação do SUS, possui importação autorizada pela ANVISA por pessoa física para uso próprio mediante prescrição médica.",
+    { size: 8, color: [80, 80, 80], gap: 4 }
+  );
+  setBody();
+  writeParagraph(
+    "O produto prescrito é regularmente importado por pessoa física para uso próprio, sob prescrição médica, conforme regulamentação da ANVISA. A regulamentação vigente permite a importação para fins terapêuticos, com a devida autorização sanitária individual."
+  );
+  if (answers.anvisa_autorizacao === "sim") writeParagraph("O paciente já possui autorização de importação ANVISA vigente.");
+  else if (answers.anvisa_autorizacao === "solicitando") writeParagraph("A autorização de importação ANVISA está em processo de solicitação.");
+  else if (answers.anvisa_autorizacao === "nao") writeParagraph("A autorização de importação ANVISA será solicitada após a confirmação do tratamento.");
+  if (answers.anvisa_processo) writeParagraph(`Número do processo ANVISA: ${answers.anvisa_processo}`);
+
+  // ═══ 11. Conclusão ═══
+  writeSectionHeader(11, "Conclusão e Declaração de Imprescindibilidade");
+  if (answers.conclusao_texto) {
+    writeParagraph(answers.conclusao_texto);
+  } else {
+    // Fallback se médico não preencher
+    writeParagraph(
+      `Pelo exposto, ATESTO que o tratamento com ${pd.productFullLabel} é IMPRESCINDÍVEL para o paciente acima identificado, dado o quadro clínico apresentado, a falha das alternativas terapêuticas disponíveis no SUS e o perfil de segurança e eficácia do canabidiol nas condições deste paciente. A interrupção ou ausência de acesso ao tratamento implicará prejuízo grave e potencialmente irreversível à sua saúde, conforme detalhado nas seções anteriores.`
+    );
+  }
+  if (answers.observacoes_finais) {
+    writeParagraph("Observações adicionais:", { bold: true, gap: 1 });
+    writeParagraph(answers.observacoes_finais);
+  }
+
+  // ═══ Assinatura ═══
+  ensureSpace(45);
+  y += 8;
+  doc.setDrawColor(80);
+  doc.setLineWidth(0.3);
+  doc.line(M, y, M + 100, y);
+  y += 5;
+  setBody();
+  writeParagraph(`Dr(a). ${doctor.full_name}`, { gap: 1, bold: true });
+  writeParagraph(`${doctor.specialty} — CRM: ${doctor.crm}`, { gap: 1 });
+  if (doctor.phone) writeParagraph(`Tel.: ${doctor.phone}`, { gap: 1 });
+  y += 3;
+  setSmall();
+  writeParagraph(`Local e data: ____________________________, ${new Date().toLocaleDateString("pt-BR")}`, { size: 9 });
+
+  // ═══ Rodapé jurídico ═══
+  ensureSpace(20);
+  y += 6;
+  doc.setDrawColor(29, 158, 117);
+  doc.setLineWidth(0.3);
+  doc.line(M, y, pw - M, y);
+  y += 4;
+  setSmall();
+  writeParagraph(
+    "Este relatório foi elaborado em atendimento aos requisitos do Tema 106 do STJ (REsp 1.657.156/RJ) e do Tema 1161 do STF (RE 1.165.959), para instrução de pleito judicial de fornecimento de medicamento à base de canabidiol.",
+    { size: 7, color: [120, 120, 120] }
+  );
+
+  // Numeração de páginas
+  const pageCount = doc.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(150);
+    doc.text(`Página ${i} de ${pageCount}`, pw - M, ph - 8, { align: "right" });
+    doc.text(`Relatório Médico — ${patient.full_name} — ${new Date().toLocaleDateString("pt-BR")}`, M, ph - 8);
+  }
+
+  doc.save(`relatorio_medico_${patient.full_name.replace(/\s/g, "_")}_${new Date().toISOString().slice(0, 10)}.pdf`);
 }

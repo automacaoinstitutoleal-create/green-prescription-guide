@@ -20,7 +20,7 @@ import {
 } from "@/lib/prescriptionData";
 import { PRESCRIPTION_PURPOSES, type PrescriptionPurpose } from "@/lib/prescriptionPurpose";
 import { type AnamneseAnswers, emptyAnamneseAnswers } from "@/lib/anamneseSchema";
-import { generatePrescriptionPDF, generatePatientGuidePDF } from "@/lib/pdfGenerator";
+import { generatePrescriptionPDF, generatePatientGuidePDF, generateLegalReportPDF } from "@/lib/pdfGenerator";
 import { ScientificReferencesCard } from "@/components/ScientificReferencesCard";
 import { AnamneseForm } from "@/components/AnamneseForm";
 
@@ -169,6 +169,17 @@ export default function Prescription() {
   // Recalculate titulation when relevant deps change
   useEffect(() => {
     if (!selectedProduct || !patient?.weight) return;
+    if (purpose === "JUDICIALIZACAO") {
+      // Judicialização: dose máxima fixa, 2 tomadas/dia.
+      // Frascos/mês = ceil(maintenanceDrops * 2 * 30 / dropsPerBottle).
+      const dropsPerMonth = maintenanceDrops * 2 * 30;
+      const bottlesPerMonth = Math.max(1, Math.ceil(dropsPerMonth / selectedProduct.dropsPerBottle));
+      setEditableBottles(bottlesPerMonth);
+      setTitulationSteps([]);
+      setBottleBreakdown([]);
+      setTotalDrops30(dropsPerMonth);
+      return;
+    }
     const steps = generateTitulationProtocol(titConfig, selectedProduct, patient.weight);
     setTitulationSteps(steps);
 
@@ -176,7 +187,7 @@ export default function Prescription() {
     setBottleBreakdown(calc.weeklyBreakdown);
     setTotalDrops30(calc.totalDrops);
     setEditableBottles(calc.bottles);
-  }, [selectedProduct, patient?.weight, titConfig]);
+  }, [selectedProduct, patient?.weight, titConfig, purpose, maintenanceDrops]);
 
   // Set edit fields when pathology changes
   useEffect(() => {
@@ -188,11 +199,15 @@ export default function Prescription() {
 
   useEffect(() => {
     if (selectedProduct) {
-      setEditQuantity(`${editableBottles} frasco(s) de 30 mL — 30 dias até retorno médico`);
+      if (purpose === "JUDICIALIZACAO") {
+        setEditQuantity(`${editableBottles} frasco(s) de 30 mL/mês — uso contínuo · validade 1 ano`);
+      } else {
+        setEditQuantity(`${editableBottles} frasco(s) de 30 mL — 30 dias até retorno médico`);
+      }
     }
-  }, [editableBottles, selectedProduct]);
+  }, [editableBottles, selectedProduct, purpose]);
 
-  const handleSaveAndDownload = async (docType: "receita" | "guia" | "ambos") => {
+  const handleSaveAndDownload = async (docType: "receita" | "guia" | "ambos" | "relatorio") => {
     if (!user || !patient || !doctor || !selectedProduct || !selectedPathology) return;
     setSaving(true);
 
@@ -213,6 +228,7 @@ export default function Prescription() {
       productFullLabel: selectedProduct.fullLabel,
       productComposition: selectedProduct.compositionLabel,
       receituarioType: selectedProduct.receituarioType,
+      isLegalCase: purpose === "JUDICIALIZACAO",
     };
 
     const insertData = {
@@ -241,6 +257,38 @@ export default function Prescription() {
       }
       if (docType === "guia" || docType === "ambos") {
         generatePatientGuidePDF({ doctor: pdfDoctor, patient, prescriptionData, product: selectedProduct });
+      }
+      if (docType === "relatorio") {
+        // Calcula idade do paciente
+        let patientAge: number | null = null;
+        if (patient.birth_date) {
+          const dob = new Date(patient.birth_date);
+          const today = new Date();
+          patientAge = today.getFullYear() - dob.getFullYear();
+          const m = today.getMonth() - dob.getMonth();
+          if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) patientAge--;
+        }
+        // Auto-preenche campos autofill da anamnese
+        const dropsPerDose = maintenanceDrops;
+        const mgCbdDay = +(dropsPerDose * mgCbdPerDrop * 2).toFixed(1);
+        const mgCanDay = +(dropsPerDose * mgPerDrop * 2).toFixed(1);
+        const filledAnswers = {
+          ...anamneseAnswers,
+          posologia_resumo: anamneseAnswers.posologia_resumo?.trim()
+            ? anamneseAnswers.posologia_resumo
+            : `${dropsPerDose} gota(s) por via ${titConfig.via || "sublingual"}, de 12 em 12 horas (${titConfig.time1 || "08:00"} e ${titConfig.time2 || "20:00"}). Dose diária: ${mgCanDay} mg de canabinoides totais (${mgCbdDay} mg de CBD). Quantidade: ${editableBottles} frasco(s)/mês. Validade: 1 ano.`,
+          rdc_660: anamneseAnswers.rdc_660?.trim()
+            ? anamneseAnswers.rdc_660
+            : "Produto à base de canabidiol importado por pessoa física para uso próprio, sob prescrição médica, com importação autorizada pela ANVISA. Enquadra-se no Tema 1161 do STF (RE 1.165.959): cabe ao Estado fornecer, em termos excepcionais, medicamento que, embora não possua registro na ANVISA, tem sua importação autorizada pela agência, quando comprovadas a hipossuficiência econômica e a imprescindibilidade clínica.",
+        };
+        generateLegalReportPDF({
+          doctor: pdfDoctor,
+          patient,
+          prescriptionData,
+          product: selectedProduct,
+          answers: filledAnswers,
+          patientAge,
+        });
       }
       toast.success("PDF gerado com sucesso! Você pode gerar outro documento ou finalizar.");
     } catch (e) {
@@ -951,10 +999,20 @@ export default function Prescription() {
                   <Button onClick={() => handleSaveAndDownload("guia")} disabled={saving} variant="outline">
                     <Download className="h-4 w-4 mr-1" /> {saving ? "Gerando..." : "Guia do Paciente (PDF)"}
                   </Button>
+                  {purpose === "JUDICIALIZACAO" && (
+                    <Button onClick={() => handleSaveAndDownload("relatorio")} disabled={saving} variant="outline" className="border-amber-300 hover:border-amber-400 hover:bg-amber-50/50 dark:hover:bg-amber-950/20">
+                      <Scale className="h-4 w-4 mr-1" /> {saving ? "Gerando..." : "Relatório Médico (PDF)"}
+                    </Button>
+                  )}
                   <Button onClick={() => handleSaveAndDownload("ambos")} disabled={saving}>
-                    <Download className="h-4 w-4 mr-1" /> {saving ? "Gerando..." : "Gerar Ambos"}
+                    <Download className="h-4 w-4 mr-1" /> {saving ? "Gerando..." : "Gerar Receita + Guia"}
                   </Button>
                 </div>
+                {purpose === "JUDICIALIZACAO" && (
+                  <p className="text-xs text-muted-foreground italic">
+                    O Relatório Médico Circunstanciado é gerado a partir da anamnese expandida e deve ser entregue ao advogado para instruir a ação judicial.
+                  </p>
+                )}
               </div>
 
               <div className="flex justify-between">
