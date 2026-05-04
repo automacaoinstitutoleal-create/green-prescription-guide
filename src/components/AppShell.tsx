@@ -1,11 +1,10 @@
 import { ReactNode, useEffect, useState } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { BrandLockup, BrandMark } from "@/components/BrandMark";
 import {
-  LayoutDashboard,
   Users,
   BookOpen,
   UserCog,
@@ -20,11 +19,12 @@ interface NavItem {
   to: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
-  end?: boolean;
+  /** Marca como ativo apenas em match exato. */
+  exact?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { to: "/", label: "Pacientes", icon: Users, end: true },
+  { to: "/", label: "Pacientes", icon: Users, exact: true },
   { to: "/biblioteca", label: "Biblioteca científica", icon: BookOpen },
   { to: "/perfil", label: "Meu perfil", icon: UserCog },
 ];
@@ -37,16 +37,16 @@ interface DoctorSummary {
 
 interface AppShellProps {
   children: ReactNode;
-  /** Subtítulo opcional acima do conteúdo, no header da página. */
   pageTitle?: string;
-  /** Eyebrow exibido acima do título. */
   pageEyebrow?: string;
-  /** Texto/JSX de descrição abaixo do título. */
   pageDescription?: ReactNode;
-  /** Slot para botões de ação no header da página. */
   pageActions?: ReactNode;
-  /** Trilha de navegação acima do título — array de { label, href? }. */
   breadcrumbs?: { label: string; href?: string }[];
+}
+
+function isActiveRoute(pathname: string, item: NavItem): boolean {
+  if (item.exact) return pathname === item.to;
+  return pathname === item.to || pathname.startsWith(item.to + "/");
 }
 
 export function AppShell({
@@ -65,17 +65,24 @@ export function AppShell({
 
   useEffect(() => {
     if (!user) return;
+    let cancelled = false;
     supabase
       .from("doctor_profiles")
       .select("full_name, crm, specialty")
       .eq("user_id", user.id)
       .single()
       .then(({ data }) => {
-        if (data) setDoctor(data);
+        if (!cancelled && data) setDoctor(data);
+      })
+      .then(undefined, (err) => {
+        // Falha não-fatal: AppShell ainda renderiza sem o bloco de doctor.
+        console.warn("[AppShell] não foi possível carregar perfil:", err);
       });
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
-  // Fecha drawer mobile ao mudar de rota
   useEffect(() => {
     setMobileOpen(false);
   }, [location.pathname]);
@@ -97,14 +104,13 @@ export function AppShell({
 
   return (
     <div className="min-h-screen bg-background">
-      {/* ─────────────── SIDEBAR (desktop fixa, mobile drawer) ─────────────── */}
+      {/* Sidebar */}
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-40 flex w-[246px] flex-col border-r border-sidebar-border bg-sidebar transition-transform duration-200 lg:translate-x-0",
           mobileOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
         )}
       >
-        {/* Logo / topo */}
         <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-5">
           <BrandLockup size={26} />
           <button
@@ -116,7 +122,6 @@ export function AppShell({
           </button>
         </div>
 
-        {/* Bloco do médico */}
         {doctor && (
           <div className="mx-3 mt-3 rounded-lg border border-sidebar-border bg-surface px-3 py-2.5">
             <div className="flex items-center gap-2.5">
@@ -135,43 +140,35 @@ export function AppShell({
           </div>
         )}
 
-        {/* Navegação */}
         <nav className="mt-5 flex-1 space-y-0.5 px-3">
           <p className="eyebrow mb-2 px-2">Navegação</p>
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
+            const active = isActiveRoute(location.pathname, item);
             return (
-              <NavLink
+              <Link
                 key={item.to}
                 to={item.to}
-                end={item.end}
-                className={({ isActive }) =>
-                  cn(
-                    "group flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] font-medium transition-colors",
-                    isActive
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                      : "text-ink-soft hover:bg-sidebar-accent/60 hover:text-foreground"
-                  )
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    <Icon
-                      className={cn(
-                        "h-4 w-4 shrink-0 transition-colors",
-                        isActive ? "text-primary" : "text-ink-soft group-hover:text-foreground"
-                      )}
-                    />
-                    <span className="flex-1">{item.label}</span>
-                    {isActive && <ChevronRight className="h-3 w-3 text-primary" />}
-                  </>
+                className={cn(
+                  "group flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] font-medium transition-colors",
+                  active
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-ink-soft hover:bg-sidebar-accent/60 hover:text-foreground"
                 )}
-              </NavLink>
+              >
+                <Icon
+                  className={cn(
+                    "h-4 w-4 shrink-0 transition-colors",
+                    active ? "text-primary" : "text-ink-soft group-hover:text-foreground"
+                  )}
+                />
+                <span className="flex-1">{item.label}</span>
+                {active && <ChevronRight className="h-3 w-3 text-primary" />}
+              </Link>
             );
           })}
         </nav>
 
-        {/* Rodapé da sidebar */}
         <div className="border-t border-sidebar-border p-3">
           <button
             onClick={handleSignOut}
@@ -189,7 +186,6 @@ export function AppShell({
         </div>
       </aside>
 
-      {/* Overlay mobile */}
       {mobileOpen && (
         <div
           className="fixed inset-0 z-30 bg-foreground/30 backdrop-blur-sm lg:hidden"
@@ -198,9 +194,7 @@ export function AppShell({
         />
       )}
 
-      {/* ─────────────── ÁREA DO CONTEÚDO ─────────────── */}
       <div className="lg:pl-[246px]">
-        {/* Top bar mobile (só aparece < lg) */}
         <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-background/85 px-4 backdrop-blur lg:hidden">
           <button
             onClick={() => setMobileOpen(true)}
@@ -215,7 +209,6 @@ export function AppShell({
           </span>
         </header>
 
-        {/* Header de página */}
         {(pageTitle || breadcrumbs) && (
           <div className="border-b border-border bg-background">
             <div className="page-content !py-7">
@@ -255,7 +248,6 @@ export function AppShell({
           </div>
         )}
 
-        {/* Conteúdo */}
         <main className="page-content animate-fade-up">{children}</main>
       </div>
     </div>
