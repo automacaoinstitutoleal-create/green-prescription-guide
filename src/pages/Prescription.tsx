@@ -231,6 +231,13 @@ export default function Prescription() {
       isLegalCase: purpose === "JUDICIALIZACAO",
     };
 
+    // Payload extra com contexto de judicialização (vai no jsonb do Supabase, não nos PDFs)
+    const prescriptionDataForStorage = {
+      ...prescriptionData,
+      purpose,
+      anamneseAnswers: purpose === "JUDICIALIZACAO" ? anamneseAnswers : null,
+    };
+
     const insertData = {
       doctor_id: user.id,
       patient_id: patient.id,
@@ -240,7 +247,7 @@ export default function Prescription() {
       calculated_dose: maintenanceDrops * 2 * mgCbdPerDrop,
       titulation_protocol: JSON.parse(JSON.stringify(titulationSteps)),
       tcle_accepted: docType === "guia" || docType === "ambos",
-      prescription_data: JSON.parse(JSON.stringify(prescriptionData)),
+      prescription_data: JSON.parse(JSON.stringify(prescriptionDataForStorage)),
     };
 
     const { error } = await supabase.from("prescriptions").insert(insertData);
@@ -896,42 +903,61 @@ export default function Prescription() {
               )}
 
               {/* Bottle calculation */}
-              <div className="p-4 rounded-lg bg-muted space-y-3">
-                <p className="font-semibold">Cálculo de frascos (30 dias)</p>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Semana</TableHead>
-                        <TableHead>Gotas/dose</TableHead>
-                        <TableHead>Dias</TableHead>
-                        <TableHead>Gotas consumidas</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {bottleBreakdown.map((b, i) => (
-                        <TableRow key={i}>
-                          <TableCell>{b.week}</TableCell>
-                          <TableCell>{b.dropsPerDose}</TableCell>
-                          <TableCell>{b.days}</TableCell>
-                          <TableCell>{b.drops}</TableCell>
-                        </TableRow>
-                      ))}
-                      <TableRow className="font-bold">
-                        <TableCell colSpan={3}>Total de gotas em 30 dias</TableCell>
-                        <TableCell>{totalDrops30}</TableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </div>
-                <div className="flex items-center gap-4">
-                  <p className="text-sm">{totalDrops30} gotas ÷ {selectedProduct.dropsPerBottle} gotas/frasco = <strong>{Math.ceil(totalDrops30 / selectedProduct.dropsPerBottle)}</strong> frasco(s)</p>
+              {purpose === "JUDICIALIZACAO" ? (
+                <div className="p-4 rounded-lg bg-muted space-y-3">
+                  <p className="font-semibold">Cálculo de frascos (uso contínuo)</p>
+                  <p className="text-sm">
+                    {maintenanceDrops} gotas/dose × 2 doses/dia × 30 dias = <strong>{maintenanceDrops * 2 * 30}</strong> gotas/mês
+                  </p>
+                  <p className="text-sm">
+                    {maintenanceDrops * 2 * 30} gotas ÷ {selectedProduct.dropsPerBottle} gotas/frasco = <strong>{editableBottles}</strong> frasco(s) por mês
+                  </p>
                   <div className="flex items-center gap-2">
-                    <Label>Frascos (editável):</Label>
+                    <Label>Frascos por mês (editável):</Label>
                     <Input type="number" min={1} className="w-20" value={editableBottles} onChange={e => setEditableBottles(Number(e.target.value))} />
                   </div>
+                  <p className="text-xs text-muted-foreground italic">
+                    A receita será emitida com validade de 1 ano. O total a ser custeado pelo Estado/plano será de aproximadamente <strong>{editableBottles * 12} frasco(s)</strong> ao longo do período.
+                  </p>
                 </div>
-              </div>
+              ) : (
+                <div className="p-4 rounded-lg bg-muted space-y-3">
+                  <p className="font-semibold">Cálculo de frascos (30 dias)</p>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Semana</TableHead>
+                          <TableHead>Gotas/dose</TableHead>
+                          <TableHead>Dias</TableHead>
+                          <TableHead>Gotas consumidas</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {bottleBreakdown.map((b, i) => (
+                          <TableRow key={i}>
+                            <TableCell>{b.week}</TableCell>
+                            <TableCell>{b.dropsPerDose}</TableCell>
+                            <TableCell>{b.days}</TableCell>
+                            <TableCell>{b.drops}</TableCell>
+                          </TableRow>
+                        ))}
+                        <TableRow className="font-bold">
+                          <TableCell colSpan={3}>Total de gotas em 30 dias</TableCell>
+                          <TableCell>{totalDrops30}</TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <p className="text-sm">{totalDrops30} gotas ÷ {selectedProduct.dropsPerBottle} gotas/frasco = <strong>{Math.ceil(totalDrops30 / selectedProduct.dropsPerBottle)}</strong> frasco(s)</p>
+                    <div className="flex items-center gap-2">
+                      <Label>Frascos (editável):</Label>
+                      <Input type="number" min={1} className="w-20" value={editableBottles} onChange={e => setEditableBottles(Number(e.target.value))} />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="p-3 rounded bg-muted/50 text-xs text-muted-foreground">
                 <p className="font-medium">⚠ Nota clínica:</p>
@@ -956,6 +982,16 @@ export default function Prescription() {
               <CardDescription>Revise os dados e gere os PDFs. Todos os campos são editáveis.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {purpose === "JUDICIALIZACAO" && (
+                <div className="p-3 rounded-lg border-2 border-amber-300 bg-amber-50/50 dark:bg-amber-950/10 text-sm">
+                  <p className="font-semibold text-amber-900 dark:text-amber-200 flex items-center gap-2">
+                    <Scale className="h-4 w-4" /> Prescrição em fluxo de Judicialização
+                  </p>
+                  <p className="text-xs text-amber-900/80 dark:text-amber-200/80 mt-1">
+                    A receita será emitida com dose máxima fixa ({maintenanceDrops} gotas × 2/dia) e validade de 1 ano. Não haverá protocolo de titulação. O Relatório Médico Circunstanciado (Tema 106 STJ + Tema 1161 STF) deve ser entregue ao advogado para instruir a ação.
+                  </p>
+                </div>
+              )}
               <div className="grid gap-4">
                 <div className="p-3 rounded-lg bg-muted">
                   <p className="text-xs text-muted-foreground">Médico</p>
