@@ -601,17 +601,27 @@ interface AnamneseAnswersForPdf {
   [key: string]: string;
 }
 
+/** Custom field added by the doctor (matches CustomAnamneseField in anamneseSchema). */
+interface LegalReportCustomField {
+  id: string;
+  label: string;
+  type: "text" | "textarea";
+  value: string;
+}
+
 interface LegalReportParams {
   doctor: DoctorInfo;
   patient: PatientInfo;
   prescriptionData: PrescriptionInfo;
   product: Product;
   answers: AnamneseAnswersForPdf;
+  /** Custom fields the doctor added on-the-fly during the anamnesis. */
+  customFields?: LegalReportCustomField[];
   /** Patient's age computed at the time of report. */
   patientAge?: number | null;
 }
 
-export function generateLegalReportPDF({ doctor, patient, prescriptionData: pd, product, answers, patientAge }: LegalReportParams) {
+export function generateLegalReportPDF({ doctor, patient, prescriptionData: pd, product, answers, customFields, patientAge }: LegalReportParams) {
   const doc = new jsPDF();
   const pw = doc.internal.pageSize.getWidth();
   const ph = doc.internal.pageSize.getHeight();
@@ -817,8 +827,27 @@ export function generateLegalReportPDF({ doctor, patient, prescriptionData: pd, 
   else if (answers.anvisa_autorizacao === "nao") writeParagraph("A autorização de importação ANVISA será solicitada após a confirmação do tratamento.");
   if (answers.anvisa_processo) writeParagraph(`Número do processo ANVISA: ${answers.anvisa_processo}`);
 
-  // ═══ 11. Conclusão ═══
-  writeSectionHeader(11, "Conclusão e Declaração de Imprescindibilidade");
+  // ═══ 11. Informações Adicionais (campos personalizados) ═══
+  // Inclui apenas se o médico adicionou pelo menos um campo personalizado preenchido.
+  const filledCustomFields = (customFields || []).filter((f) => f.value && f.value.trim());
+  let conclusionNumber = 11;
+  if (filledCustomFields.length > 0) {
+    writeSectionHeader(11, "Informações Adicionais Relatadas pelo Médico Assistente");
+    setSmall();
+    writeParagraph(
+      "Os itens abaixo foram acrescentados pelo médico assistente para detalhar aspectos do caso que não estão cobertos pelas seções anteriores.",
+      { size: 8, color: [80, 80, 80], gap: 4 }
+    );
+    setBody();
+    filledCustomFields.forEach((field) => {
+      writeParagraph(field.label.endsWith(":") || field.label.endsWith("?") ? field.label : `${field.label}:`, { bold: true, gap: 1 });
+      writeParagraph(field.value);
+    });
+    conclusionNumber = 12;
+  }
+
+  // ═══ Conclusão (numeração depende da existência de campos personalizados) ═══
+  writeSectionHeader(conclusionNumber, "Conclusão e Declaração de Imprescindibilidade");
   if (answers.conclusao_texto) {
     writeParagraph(answers.conclusao_texto);
   } else {

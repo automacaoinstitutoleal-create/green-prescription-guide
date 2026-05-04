@@ -19,7 +19,7 @@ import {
   type PathologyInfo, type Product, type TitulationStep, type TitulationConfig,
 } from "@/lib/prescriptionData";
 import { PRESCRIPTION_PURPOSES, type PrescriptionPurpose } from "@/lib/prescriptionPurpose";
-import { type AnamneseAnswers, emptyAnamneseAnswers } from "@/lib/anamneseSchema";
+import { type AnamneseAnswers, type CustomAnamneseField, emptyAnamneseAnswers } from "@/lib/anamneseSchema";
 import { generatePrescriptionPDF, generatePatientGuidePDF, generateLegalReportPDF } from "@/lib/pdfGenerator";
 import { ScientificReferencesCard } from "@/components/ScientificReferencesCard";
 import { AnamneseForm } from "@/components/AnamneseForm";
@@ -50,6 +50,7 @@ export default function Prescription() {
   const [step, setStep] = useState(1);
   const [purpose, setPurpose] = useState<PrescriptionPurpose | null>(null);
   const [anamneseAnswers, setAnamneseAnswers] = useState<AnamneseAnswers>(emptyAnamneseAnswers());
+  const [customAnamneseFields, setCustomAnamneseFields] = useState<CustomAnamneseField[]>([]);
   const [patient, setPatient] = useState<Patient | null>(null);
   const [doctor, setDoctor] = useState<DoctorProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -236,6 +237,7 @@ export default function Prescription() {
       ...prescriptionData,
       purpose,
       anamneseAnswers: purpose === "JUDICIALIZACAO" ? anamneseAnswers : null,
+      customAnamneseFields: purpose === "JUDICIALIZACAO" ? customAnamneseFields : null,
     };
 
     const insertData = {
@@ -294,6 +296,7 @@ export default function Prescription() {
           prescriptionData,
           product: selectedProduct,
           answers: filledAnswers,
+          customFields: customAnamneseFields,
           patientAge,
         });
       }
@@ -767,7 +770,12 @@ export default function Prescription() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <AnamneseForm answers={anamneseAnswers} onChange={setAnamneseAnswers} />
+              <AnamneseForm
+                answers={anamneseAnswers}
+                onChange={setAnamneseAnswers}
+                customFields={customAnamneseFields}
+                onCustomFieldsChange={setCustomAnamneseFields}
+              />
               <div className="flex justify-between">
                 <Button variant="outline" onClick={() => setStep(5)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
                 <Button onClick={() => setStep(7)}>Próximo <ArrowRight className="h-4 w-4 ml-1" /></Button>

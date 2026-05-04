@@ -333,6 +333,22 @@ export const ANAMNESE_SCHEMA: AnamneseSection[] = [
 /** Default empty record matching the schema. */
 export type AnamneseAnswers = Record<string, string>;
 
+/**
+ * Custom field added by the doctor on-the-fly.
+ * Allows the doctor to include information that isn't covered by the
+ * standard schema but is relevant for the specific case.
+ */
+export interface CustomAnamneseField {
+  /** Unique id (generated client-side, e.g. `custom_${timestamp}`). */
+  id: string;
+  /** Question/title written by the doctor. */
+  label: string;
+  /** Field rendering type — only short or long text for simplicity. */
+  type: "text" | "textarea";
+  /** Doctor-provided value. */
+  value: string;
+}
+
 export function emptyAnamneseAnswers(): AnamneseAnswers {
   const empty: AnamneseAnswers = {};
   ANAMNESE_SCHEMA.forEach((section) => {
@@ -341,6 +357,11 @@ export function emptyAnamneseAnswers(): AnamneseAnswers {
     });
   });
   return empty;
+}
+
+/** Generates a unique id for a custom field. */
+export function makeCustomFieldId(): string {
+  return `custom_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
 /** Returns a list of required fields that are empty. */
