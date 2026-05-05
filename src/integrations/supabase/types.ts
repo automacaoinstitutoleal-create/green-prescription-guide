@@ -100,13 +100,7 @@ export type Database = {
           created_at: string
           doctor_id: string
           full_name: string
-          healthcare_coverage: string | null
           id: string
-          legal_guardian_cpf: string | null
-          legal_guardian_name: string | null
-          legal_guardian_phone: string | null
-          legal_guardian_relationship: string | null
-          legal_guardian_rg: string | null
           rg: string | null
           updated_at: string
           weight: number | null
@@ -119,13 +113,7 @@ export type Database = {
           created_at?: string
           doctor_id: string
           full_name: string
-          healthcare_coverage?: string | null
           id?: string
-          legal_guardian_cpf?: string | null
-          legal_guardian_name?: string | null
-          legal_guardian_phone?: string | null
-          legal_guardian_relationship?: string | null
-          legal_guardian_rg?: string | null
           rg?: string | null
           updated_at?: string
           weight?: number | null
@@ -138,13 +126,7 @@ export type Database = {
           created_at?: string
           doctor_id?: string
           full_name?: string
-          healthcare_coverage?: string | null
           id?: string
-          legal_guardian_cpf?: string | null
-          legal_guardian_name?: string | null
-          legal_guardian_phone?: string | null
-          legal_guardian_relationship?: string | null
-          legal_guardian_rg?: string | null
           rg?: string | null
           updated_at?: string
           weight?: number | null
