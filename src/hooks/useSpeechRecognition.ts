@@ -69,6 +69,24 @@ export function useSpeechRecognition(opts: UseSpeechRecognitionOptions = {}) {
   const [transcript, setTranscript] = useState("");
   const [interim, setInterim] = useState("");
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  /**
+   * Flag de retry — controla se já tentamos retry após erro de rede
+   * nesta sessão de captura. Evita loop infinito de retries.
+   */
+  const networkRetriedRef = useRef(false);
+
+  /**
+   * Mensagem de erro de rede com causa provável e orientação clara.
+   * Esse erro é o mais comum e o mais importante de explicar bem.
+   */
+  const buildNetworkErrorMessage = useCallback((): string => {
+    return (
+      "Não foi possível processar a captura de voz. " +
+      "A captura de voz gratuita do navegador depende dos servidores de fala do Google. " +
+      "Verifique sua conexão; se estiver em rede corporativa/clínica, ela pode estar bloqueando o serviço. " +
+      "Tente outra rede (ex.: 4G do celular) ou digite manualmente."
+    );
+  }, []);
 
   // Detecta suporte na montagem.
   useEffect(() => {
@@ -81,7 +99,7 @@ export function useSpeechRecognition(opts: UseSpeechRecognitionOptions = {}) {
     const w = window as unknown as WindowWithSpeech;
     const SpeechRec = w.SpeechRecognition || w.webkitSpeechRecognition;
     if (!SpeechRec) {
-      onError?.("Captura de voz não suportada neste navegador.");
+      onError?.("Captura de voz não suportada neste navegador. Use Google Chrome ou Microsoft Edge.");
       return;
     }
 
@@ -89,6 +107,9 @@ export function useSpeechRecognition(opts: UseSpeechRecognitionOptions = {}) {
     if (recognitionRef.current) {
       try { recognitionRef.current.abort(); } catch { /* noop */ }
     }
+
+    // Reset do flag de retry para esta nova sessão de captura
+    networkRetriedRef.current = false;
 
     const rec = new SpeechRec();
     rec.lang = language;
@@ -114,16 +135,47 @@ export function useSpeechRecognition(opts: UseSpeechRecognitionOptions = {}) {
     };
 
     rec.onerror = (event: SpeechRecognitionErrorEvent) => {
-      const msg = event.error === "no-speech"
-        ? "Nenhuma fala detectada."
-        : event.error === "not-allowed"
-        ? "Permissão de microfone negada. Habilite em Configurações do navegador."
-        : event.error === "audio-capture"
-        ? "Microfone não encontrado."
-        : event.error === "network"
-        ? "Erro de rede ao processar a fala."
-        : `Erro de captura: ${event.error}`;
-      onError?.(msg);
+      // Log detalhado no console para diagnóstico (visível em DevTools)
+      console.warn("[SpeechRecognition] Erro:", {
+        error: event.error,
+        message: event.message,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Erro 'network': o reconhecimento foi até o servidor de speech do
+      // Google (speech.googleapis.com) e a rede falhou. Tentamos uma
+      // segunda vez automaticamente — falhas momentâneas são comuns.
+      if (event.error === "network" && !networkRetriedRef.current) {
+        networkRetriedRef.current = true;
+        console.info("[SpeechRecognition] network error — tentando novamente em 600ms…");
+        setTimeout(() => {
+          try {
+            rec.start();
+          } catch {
+            // Se nem o retry conseguir iniciar, segue pro caminho de erro
+            onError?.(buildNetworkErrorMessage());
+            setListening(false);
+          }
+        }, 600);
+        return;
+      }
+
+      const msg =
+        event.error === "no-speech"
+          ? "Nenhuma fala detectada. Tente falar mais próximo do microfone."
+          : event.error === "not-allowed"
+          ? "Permissão de microfone negada. Clique no ícone de cadeado na barra de URL e permita o uso do microfone para este site."
+          : event.error === "audio-capture"
+          ? "Microfone não encontrado. Verifique se há um microfone conectado e selecionado nas configurações do sistema."
+          : event.error === "network"
+          ? buildNetworkErrorMessage()
+          : event.error === "service-not-allowed"
+          ? "Serviço de reconhecimento de fala não disponível neste navegador. Use Google Chrome ou Microsoft Edge."
+          : event.error === "aborted"
+          ? "" // silencioso — captura cancelada pelo usuário
+          : `Erro na captura de voz: ${event.error}`;
+
+      if (msg) onError?.(msg);
       setListening(false);
     };
 
