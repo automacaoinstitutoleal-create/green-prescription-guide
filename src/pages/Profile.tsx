@@ -40,7 +40,8 @@ export default function Profile() {
     e.preventDefault();
     if (!user) return;
     setLoading(true);
-    const { error } = await supabase.from("doctor_profiles").update(form).eq("user_id", user.id);
+    const { email: _email, ...updateData } = form;
+    const { error } = await supabase.from("doctor_profiles").update(updateData).eq("user_id", user.id);
     setLoading(false);
     if (error) {
       toast.error("Erro ao salvar: " + error.message);

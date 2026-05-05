@@ -65,13 +65,13 @@ export default function PatientHistory() {
 
   const handleRedownload = (presc: PrescriptionRow) => {
     if (!patient || !doctor) return;
-    const pd = presc.prescription_data as Parameters<typeof generatePrescriptionPDF>[0]["prescriptionData"];
+    const pd = presc.prescription_data as unknown as Parameters<typeof generatePrescriptionPDF>[0]["prescriptionData"];
     generatePrescriptionPDF({ doctor, patient, prescriptionData: pd });
   };
 
   const handleDownloadGuide = (presc: PrescriptionRow) => {
     if (!patient || !doctor) return;
-    const pd = presc.prescription_data as Parameters<typeof generatePatientGuidePDF>[0]["prescriptionData"];
+    const pd = presc.prescription_data as unknown as Parameters<typeof generatePatientGuidePDF>[0]["prescriptionData"];
     const product = PRODUCTS.find((p) => p.name === presc.product);
     if (!product) return;
     generatePatientGuidePDF({ doctor, patient, prescriptionData: pd, product });
