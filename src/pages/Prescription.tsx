@@ -410,7 +410,7 @@ export default function Prescription() {
   const doseRange = selectedPathology ? getDoseRange(selectedPathology, weight) : null;
 
   const STEP_LABELS = ["Médico", "Paciente", "Finalidade", "Patologia", "Produto", "Posologia", "Revisão"];
-  const totalSteps = 6;
+  const totalSteps = STEP_LABELS.length;
 
   return (
     <AppShell
