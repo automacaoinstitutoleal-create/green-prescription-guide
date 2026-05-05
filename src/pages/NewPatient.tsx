@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -6,9 +6,56 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { AppShell } from "@/components/AppShell";
 import { toast } from "sonner";
-import { Save, UserPlus, UserCog2 } from "lucide-react";
+import { Save, UserPlus, UserCog2, Users, Heart, ShieldAlert } from "lucide-react";
+
+type HealthcareCoverage = "SUS" | "PLANO" | "PARTICULAR";
+
+interface FormState {
+  full_name: string;
+  cpf: string;
+  rg: string;
+  birth_date: string;
+  weight: string;
+  address: string;
+  clinical_notes: string;
+  healthcare_coverage: HealthcareCoverage;
+  legal_guardian_name: string;
+  legal_guardian_cpf: string;
+  legal_guardian_rg: string;
+  legal_guardian_relationship: string;
+  legal_guardian_phone: string;
+}
+
+const EMPTY_FORM: FormState = {
+  full_name: "",
+  cpf: "",
+  rg: "",
+  birth_date: "",
+  weight: "",
+  address: "",
+  clinical_notes: "",
+  healthcare_coverage: "PARTICULAR",
+  legal_guardian_name: "",
+  legal_guardian_cpf: "",
+  legal_guardian_rg: "",
+  legal_guardian_relationship: "",
+  legal_guardian_phone: "",
+};
+
+/** Idade em anos a partir da data de nascimento (ISO YYYY-MM-DD). */
+function calcAge(isoDate: string): number | null {
+  if (!isoDate) return null;
+  const b = new Date(isoDate + "T00:00:00");
+  if (isNaN(b.getTime())) return null;
+  const now = new Date();
+  let age = now.getFullYear() - b.getFullYear();
+  const m = now.getMonth() - b.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < b.getDate())) age--;
+  return age;
+}
 
 export default function NewPatient() {
   const { user } = useAuth();
@@ -17,15 +64,7 @@ export default function NewPatient() {
   const isEdit = Boolean(patientId);
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(isEdit);
-  const [form, setForm] = useState({
-    full_name: "",
-    cpf: "",
-    rg: "",
-    birth_date: "",
-    weight: "",
-    address: "",
-    clinical_notes: "",
-  });
+  const [form, setForm] = useState<FormState>(EMPTY_FORM);
 
   useEffect(() => {
     if (!isEdit || !user) return;
@@ -48,28 +87,66 @@ export default function NewPatient() {
         weight: data.weight != null ? String(data.weight) : "",
         address: data.address ?? "",
         clinical_notes: data.clinical_notes ?? "",
+        healthcare_coverage: (data.healthcare_coverage as HealthcareCoverage) ?? "PARTICULAR",
+        legal_guardian_name: data.legal_guardian_name ?? "",
+        legal_guardian_cpf: data.legal_guardian_cpf ?? "",
+        legal_guardian_rg: data.legal_guardian_rg ?? "",
+        legal_guardian_relationship: data.legal_guardian_relationship ?? "",
+        legal_guardian_phone: data.legal_guardian_phone ?? "",
       });
       setLoadingData(false);
     })();
   }, [isEdit, patientId, user, navigate]);
 
-  const set = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setForm((prev) => ({ ...prev, [field]: e.target.value }));
+  const set = <K extends keyof FormState>(field: K) => (value: FormState[K]) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
   };
+
+  // Detecção de menor de idade
+  const age = useMemo(() => calcAge(form.birth_date), [form.birth_date]);
+  const isMinor = age != null && age < 18;
+  const minorRequiresGuardian = isMinor;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+
+    // Validações reforçadas
+    if (!form.birth_date) {
+      toast.error("Data de nascimento é obrigatória — usada para calcular a dose por peso e idade.");
+      return;
+    }
+    if (!form.weight || parseFloat(form.weight) <= 0) {
+      toast.error("Peso é obrigatório — usado para calcular a dose ideal de canabidiol.");
+      return;
+    }
+    if (!form.address.trim()) {
+      toast.error("Endereço completo é obrigatório — usado para a entrega da medicação importada.");
+      return;
+    }
+    if (minorRequiresGuardian) {
+      if (!form.legal_guardian_name.trim() || !form.legal_guardian_cpf.trim() || !form.legal_guardian_relationship.trim()) {
+        toast.error("Paciente menor de 18 anos: dados do responsável legal são obrigatórios.");
+        return;
+      }
+    }
+
     setLoading(true);
 
     const payload = {
       full_name: form.full_name,
       cpf: form.cpf,
       rg: form.rg || null,
-      birth_date: form.birth_date || null,
-      weight: form.weight ? parseFloat(form.weight) : null,
-      address: form.address || null,
+      birth_date: form.birth_date,
+      weight: parseFloat(form.weight),
+      address: form.address,
       clinical_notes: form.clinical_notes || null,
+      healthcare_coverage: form.healthcare_coverage,
+      legal_guardian_name: minorRequiresGuardian ? form.legal_guardian_name : null,
+      legal_guardian_cpf: minorRequiresGuardian ? form.legal_guardian_cpf : null,
+      legal_guardian_rg: minorRequiresGuardian ? (form.legal_guardian_rg || null) : null,
+      legal_guardian_relationship: minorRequiresGuardian ? form.legal_guardian_relationship : null,
+      legal_guardian_phone: minorRequiresGuardian ? (form.legal_guardian_phone || null) : null,
     };
 
     const { error } = isEdit
@@ -105,6 +182,7 @@ export default function NewPatient() {
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
           <form onSubmit={handleSubmit} className="card-editorial p-6 lg:p-8">
+            {/* ── Identificação ── */}
             <div className="mb-6 flex items-center gap-3 border-b border-border pb-5">
               <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary-soft text-primary">
                 <Icon className="h-5 w-5" />
@@ -120,7 +198,12 @@ export default function NewPatient() {
             </div>
 
             <div className="space-y-5">
-              <Field label="Nome completo" required value={form.full_name} onChange={set("full_name")} />
+              <Field
+                label="Nome completo"
+                required
+                value={form.full_name}
+                onChange={set("full_name")}
+              />
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="CPF" required mono placeholder="000.000.000-00" value={form.cpf} onChange={set("cpf")} />
@@ -128,17 +211,104 @@ export default function NewPatient() {
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field label="Data de nascimento" type="date" value={form.birth_date} onChange={set("birth_date")} />
-                <Field label="Peso (kg)" type="number" mono placeholder="72.5" value={form.weight} onChange={set("weight")} />
+                <Field
+                  label="Data de nascimento"
+                  required
+                  type="date"
+                  value={form.birth_date}
+                  onChange={set("birth_date")}
+                  hint={age != null ? `${age} ano${age === 1 ? "" : "s"}${isMinor ? " · menor de idade" : ""}` : "Necessária para cálculo de dose por idade."}
+                />
+                <Field
+                  label="Peso (kg)"
+                  required
+                  type="number"
+                  mono
+                  placeholder="72.5"
+                  value={form.weight}
+                  onChange={set("weight")}
+                  hint="Necessário para cálculo de dose em mg/kg/dia."
+                />
               </div>
 
-              <Field label="Endereço completo" placeholder="Rua, número, bairro, cidade/UF" value={form.address} onChange={set("address")} />
+              <Field
+                label="Endereço completo"
+                required
+                placeholder="Rua, número, complemento, bairro, cidade/UF, CEP"
+                value={form.address}
+                onChange={set("address")}
+                hint="Necessário para a entrega do medicamento importado."
+              />
+
+              {/* ── Cobertura de saúde ── */}
+              <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-4">
+                <div className="flex items-center gap-2">
+                  <Heart className="h-4 w-4 text-primary" />
+                  <Label className="text-[13px] font-semibold">Cobertura de saúde do paciente</Label>
+                  <span className="text-destructive">*</span>
+                </div>
+                <p className="text-[11.5px] text-ink-soft">
+                  Influencia a redação do relatório médico — o conteúdo se ajusta automaticamente ao perfil do paciente.
+                </p>
+                <RadioGroup
+                  value={form.healthcare_coverage}
+                  onValueChange={(v) => set("healthcare_coverage")(v as HealthcareCoverage)}
+                  className="mt-2 flex flex-wrap gap-x-6 gap-y-2"
+                >
+                  <RadioOption value="SUS" label="SUS (paciente do sistema público)" />
+                  <RadioOption value="PLANO" label="Plano de saúde" />
+                  <RadioOption value="PARTICULAR" label="Particular" />
+                </RadioGroup>
+              </div>
+
+              {/* ── Responsável legal (aparece se menor) ── */}
+              {minorRequiresGuardian && (
+                <div className="space-y-4 rounded-lg border border-warning/40 bg-warning/5 p-4">
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert className="h-4 w-4 text-warning" />
+                    <Label className="text-[13px] font-semibold">Responsável legal</Label>
+                    <span className="text-destructive">*</span>
+                  </div>
+                  <p className="text-[11.5px] text-ink-soft">
+                    Paciente com {age} anos. Dados do responsável legal aparecerão na receita e no relatório médico.
+                  </p>
+
+                  <Field
+                    label="Nome completo do responsável"
+                    required
+                    value={form.legal_guardian_name}
+                    onChange={set("legal_guardian_name")}
+                  />
+
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <Field label="CPF do responsável" required mono placeholder="000.000.000-00" value={form.legal_guardian_cpf} onChange={set("legal_guardian_cpf")} />
+                    <Field label="RG do responsável" mono value={form.legal_guardian_rg} onChange={set("legal_guardian_rg")} />
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <Field
+                      label="Parentesco / vínculo"
+                      required
+                      placeholder="Pai, Mãe, Tutor, Curador…"
+                      value={form.legal_guardian_relationship}
+                      onChange={set("legal_guardian_relationship")}
+                    />
+                    <Field
+                      label="Telefone de contato"
+                      mono
+                      placeholder="(00) 00000-0000"
+                      value={form.legal_guardian_phone}
+                      onChange={set("legal_guardian_phone")}
+                    />
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <Label className="text-[12.5px]">Observações clínicas iniciais</Label>
                 <Textarea
                   value={form.clinical_notes}
-                  onChange={set("clinical_notes")}
+                  onChange={(e) => set("clinical_notes")(e.target.value)}
                   rows={4}
                   placeholder="Histórico relevante, comorbidades, medicações em uso, alergias…"
                   className="resize-y"
@@ -163,16 +333,34 @@ export default function NewPatient() {
           {/* Coluna lateral */}
           <aside className="space-y-4">
             <div className="card-editorial p-5">
-              <p className="eyebrow mb-2">Importante</p>
-              <p className="text-[13px] leading-relaxed">
-                O <strong>peso</strong> é essencial para o cálculo da titulação
-                em mg/kg/dia. Se ainda não tiver, pode atualizar mais tarde antes
-                da primeira receita.
-              </p>
+              <div className="mb-2 flex items-center gap-2">
+                <Users className="h-4 w-4 text-primary" />
+                <p className="eyebrow !mb-0">Por que esses dados?</p>
+              </div>
+              <ul className="space-y-2 text-[12.5px] leading-relaxed text-ink-soft">
+                <li>
+                  <strong className="text-foreground">Peso</strong> — base do cálculo
+                  da dose em mg/kg/dia.
+                </li>
+                <li>
+                  <strong className="text-foreground">Data de nascimento</strong> —
+                  ajusta o protocolo conforme idade e identifica menores que
+                  precisam de responsável legal.
+                </li>
+                <li>
+                  <strong className="text-foreground">Endereço completo</strong> —
+                  usado para entrega do produto importado pela Greenlion.
+                </li>
+                <li>
+                  <strong className="text-foreground">Cobertura de saúde</strong> —
+                  ajusta a redação do relatório médico conforme o perfil
+                  assistencial do paciente.
+                </li>
+              </ul>
             </div>
             <div className="card-editorial p-5">
               <p className="eyebrow mb-2">LGPD</p>
-              <p className="text-[12.5px] text-ink-soft leading-relaxed">
+              <p className="text-[12.5px] leading-relaxed text-ink-soft">
                 Os dados do paciente são acessíveis apenas pela sua conta médica.
                 Toda comunicação com o servidor é cifrada.
               </p>
@@ -185,15 +373,16 @@ export default function NewPatient() {
 }
 
 function Field({
-  label, value, onChange, required, mono, placeholder, type = "text",
+  label, value, onChange, required, mono, placeholder, type = "text", hint,
 }: {
   label: string;
   value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onChange: (value: string) => void;
   required?: boolean;
   mono?: boolean;
   placeholder?: string;
   type?: string;
+  hint?: string;
 }) {
   return (
     <div className="space-y-1.5">
@@ -203,12 +392,22 @@ function Field({
       <Input
         type={type}
         value={value}
-        onChange={onChange}
+        onChange={(e) => onChange(e.target.value)}
         required={required}
         placeholder={placeholder}
         className={`h-10 ${mono ? "font-mono" : ""}`}
         step={type === "number" ? "0.1" : undefined}
       />
+      {hint && <p className="text-[11px] text-ink-soft">{hint}</p>}
     </div>
+  );
+}
+
+function RadioOption({ value, label }: { value: string; label: string }) {
+  return (
+    <label className="flex cursor-pointer items-center gap-2">
+      <RadioGroupItem value={value} id={`coverage-${value}`} />
+      <span className="text-[12.5px]">{label}</span>
+    </label>
   );
 }

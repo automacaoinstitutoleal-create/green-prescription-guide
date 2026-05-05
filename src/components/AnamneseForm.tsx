@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { VoiceTextarea } from "@/components/VoiceTextarea";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -59,12 +60,13 @@ function FieldRow({
         );
       case "textarea":
         return (
-          <Textarea
+          <VoiceTextarea
+            voiceCapture={field.voiceCapture}
             value={value}
             placeholder={field.placeholder}
             onChange={(e) => onChange(e.target.value)}
             disabled={isAutofill}
-            rows={Math.max(3, Math.min(8, (value.match(/\n/g) || []).length + 3))}
+            rows={Math.max(3, Math.min(10, (value.match(/\n/g) || []).length + 3))}
             className="resize-y"
           />
         );
@@ -340,7 +342,7 @@ export function AnamneseForm({ answers, onChange, customFields, onCustomFieldsCh
                 <DialogHeader>
                   <DialogTitle>Novo campo personalizado</DialogTitle>
                   <DialogDescription>
-                    Crie um campo específico para este caso. Ele será incluído no Relatório Médico Circunstanciado.
+                    Crie um campo específico para este caso. Ele será incluído no Relatório Médico Detalhado.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-2">

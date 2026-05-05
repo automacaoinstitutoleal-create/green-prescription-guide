@@ -88,7 +88,7 @@ export default function Register() {
           <p className="mt-6 max-w-[420px] text-[15px] leading-relaxed text-primary-foreground/85">
             Tenha acesso à plataforma completa de prescrição assistida —
             calculadora de titulação, geração de receitas e relatórios médicos
-            circunstanciados, biblioteca científica organizada por patologia.
+            detalhados, biblioteca científica organizada por patologia.
           </p>
         </div>
 

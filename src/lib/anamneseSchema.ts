@@ -1,58 +1,79 @@
 // ═══════════════════════════════════════════════════════════════════
-// Anamnese Expandida — Judicialização
+// Anamnese Médica Detalhada
 //
 // Schema do formulário que o médico preenche durante a consulta para
-// gerar o Relatório Médico Circunstanciado, atendendo:
+// gerar o RELATÓRIO MÉDICO DETALHADO.
 //
-//   • Tema 106 STJ (REsp 1.657.156/RJ): laudo médico fundamentado
-//     comprovando imprescindibilidade + ineficácia de fármacos do SUS
-//   • Tema 1161 STF (RE 1.165.959): fornecimento de medicamento sem
-//     registro com importação autorizada pela ANVISA
-//   • Tema 1234 STF: competência da Justiça Estadual
+// Princípio editorial: este é um documento MÉDICO, não jurídico. Não
+// contém referências a teses, temas, dispositivos legais ou termos
+// processuais. O médico atesta o quadro clínico e a imprescindibilidade
+// terapêutica; a fundamentação jurídica é responsabilidade do advogado
+// do paciente quando aplicável, em outro documento.
 //
-// Cada seção do schema corresponde a um bloco do PDF gerado.
+// Cada campo de texto tem `defaultText` — uma sugestão de redação que
+// o médico pode aceitar e ajustar, em vez de escrever do zero. Os
+// `defaultText` usam {placeholders} que são substituídos com dados do
+// paciente/produto pela função fillDefaultsForPatient().
 // ═══════════════════════════════════════════════════════════════════
 
-export type FieldType = "text" | "textarea" | "date" | "select" | "multi-text" | "yes-no" | "yes-no-na";
+export type FieldType = "text" | "textarea" | "date" | "select" | "yes-no" | "yes-no-na";
 
 export interface AnamneseField {
-  /** Identifier used in state. */
   id: string;
-  /** Question shown to the doctor. */
   label: string;
-  /** Field type — how it renders. */
   type: FieldType;
-  /** Optional helper hint shown below the input. */
   hint?: string;
-  /** Optional placeholder. */
   placeholder?: string;
-  /** For 'select' type: options. */
   options?: string[];
-  /** Whether the field is required for the report to be considered complete. */
   required?: boolean;
-  /** When true, this field is auto-filled from existing patient/prescription data. */
+  /** Quando true, o campo é preenchido automaticamente (não exige input). */
   autofill?: boolean;
+  /**
+   * Texto sugerido inicial. O médico pode editar livremente.
+   * Suporta placeholders no formato {patient_name}, {pathology}, etc.
+   * Substituídos por fillDefaultsForPatient().
+   */
+  defaultText?: string;
+  /** Permite captura de voz para textareas longos. */
+  voiceCapture?: boolean;
 }
 
 export interface AnamneseSection {
   id: string;
   title: string;
   description?: string;
-  /** Whether the entire section can be hidden when not relevant. */
-  collapsible?: boolean;
+  /**
+   * Quando definido, esta seção só aparece se a função retornar true.
+   * Permite seções condicionais ao perfil do paciente (ex.: só SUS).
+   */
+  visibleWhen?: (ctx: AnamneseContext) => boolean;
   fields: AnamneseField[];
+}
+
+/** Contexto usado para preencher textos padrão e definir visibilidade. */
+export interface AnamneseContext {
+  patientName: string;
+  patientAge: number | null;
+  pathology: string;
+  productLabel: string;
+  productLine: string; // PRECISION ou ESSENTIAL
+  productCannabinoids: string; // resumo de canabinoides
+  doseSummary: string; // posologia em texto
+  healthcareCoverage: "SUS" | "PLANO" | "PARTICULAR";
+  legalGuardianName?: string;
+  legalGuardianRelationship?: string;
 }
 
 /**
  * Schema completo da anamnese.
- * Total: ~50 campos distribuídos em 9 seções clínicas.
+ * 8 seções clínicas, ~30 campos. Sem termos jurídicos.
  */
 export const ANAMNESE_SCHEMA: AnamneseSection[] = [
   // ═══ 1. HISTÓRIA DA DOENÇA ATUAL ═══
   {
     id: "historia",
-    title: "1. História da Doença Atual",
-    description: "Quando começou, como evoluiu, sintomas atuais. Fundamental para demonstrar a cronicidade e a gravidade.",
+    title: "1. História da doença atual",
+    description: "Quando começou, como evoluiu, sintomas atuais e impacto na vida do paciente.",
     fields: [
       {
         id: "inicio_sintomas",
@@ -63,32 +84,42 @@ export const ANAMNESE_SCHEMA: AnamneseSection[] = [
       },
       {
         id: "evolucao",
-        label: "Como a condição evoluiu desde o início?",
+        label: "Como o quadro evoluiu desde o início?",
         type: "textarea",
-        placeholder: "Descreva progressão, fases de melhora/piora, gatilhos identificados...",
+        placeholder: "Descreva progressão, fases de melhora e piora, gatilhos identificados.",
         required: true,
+        voiceCapture: true,
+        defaultText:
+          "O paciente apresenta {pathology} com evolução progressiva. Inicialmente os sintomas eram intermitentes e respondiam parcialmente às medidas iniciais. Com o tempo, houve aumento da frequência e intensidade, com piora funcional progressiva. Atualmente o quadro mantém-se em padrão crônico, com flutuações que não retornam ao quadro inicial.",
       },
       {
         id: "sintomas_atuais",
         label: "Quais são os sintomas atuais e sua intensidade?",
         type: "textarea",
-        placeholder: "Liste sintomas com frequência, duração e intensidade (escala se aplicável)",
+        placeholder: "Liste sintomas com frequência, duração e intensidade.",
         required: true,
+        voiceCapture: true,
+        defaultText:
+          "O paciente apresenta atualmente sintomas característicos de {pathology}, com intensidade moderada a importante. Há comprometimento da qualidade de vida e da capacidade funcional. Os sintomas estão presentes na maior parte dos dias.",
       },
       {
         id: "impacto_funcional",
         label: "Qual o impacto na vida diária do paciente?",
         type: "textarea",
         hint: "Capacidade laboral, social, autonomia, sono, alimentação, autocuidado.",
-        placeholder: "Ex.: paciente afastado do trabalho há 8 meses, dependente de cuidador para AVDs...",
+        placeholder: "Ex.: paciente afastado do trabalho há 8 meses, dependente de cuidador para AVDs…",
         required: true,
+        voiceCapture: true,
+        defaultText:
+          "O quadro causa impacto funcional significativo: comprometimento das atividades laborais e sociais, alteração do sono, redução da autonomia para atividades de vida diária e prejuízo da qualidade de vida global.",
       },
       {
         id: "exames_realizados",
-        label: "Quais exames complementares foram realizados?",
+        label: "Exames complementares realizados",
         type: "textarea",
         hint: "Laboratoriais, imagens, eletrofisiológicos, escalas validadas.",
-        placeholder: "Ex.: RM crânio (data); polissonografia (data); HAM-A 28; PHQ-9 19...",
+        placeholder: "Ex.: RM crânio (data); polissonografia (data); HAM-A 28; PHQ-9 19…",
+        voiceCapture: true,
       },
     ],
   },
@@ -96,14 +127,15 @@ export const ANAMNESE_SCHEMA: AnamneseSection[] = [
   // ═══ 2. ANTECEDENTES E COMORBIDADES ═══
   {
     id: "antecedentes",
-    title: "2. Antecedentes e Comorbidades",
+    title: "2. Antecedentes e comorbidades",
     description: "Outras doenças, alergias, internações, contexto familiar relevante.",
     fields: [
       {
         id: "comorbidades",
         label: "Comorbidades clínicas relevantes",
         type: "textarea",
-        placeholder: "Ex.: hipertensão controlada, diabetes tipo 2, depressão maior...",
+        placeholder: "Ex.: hipertensão controlada, diabetes tipo 2, depressão maior…",
+        voiceCapture: true,
       },
       {
         id: "alergias",
@@ -115,81 +147,103 @@ export const ANAMNESE_SCHEMA: AnamneseSection[] = [
         id: "antecedentes_familiares",
         label: "Antecedentes familiares relevantes",
         type: "textarea",
-        placeholder: "História familiar de doenças neurológicas, psiquiátricas, genéticas relevantes ao caso",
+        placeholder: "História familiar de doenças neurológicas, psiquiátricas, genéticas relevantes ao caso.",
+        voiceCapture: true,
       },
       {
         id: "internacoes",
         label: "Internações ou cirurgias prévias relacionadas",
         type: "textarea",
-        placeholder: "Datas, motivos, desfechos",
+        placeholder: "Datas, motivos, desfechos.",
+        voiceCapture: true,
       },
     ],
   },
 
-  // ═══ 3. TRATAMENTOS PRÉVIOS — CRÍTICO PARA TEMA 106 ═══
+  // ═══ 3. TRATAMENTOS PRÉVIOS ═══
+  // Sem menções a NATJUS, Tema 106 ou juiz. É clinicamente relevante
+  // para qualquer perfil de paciente — tanto particular quanto SUS.
   {
     id: "tratamentos_previos",
-    title: "3. Tratamentos Prévios Tentados (Crítico — Tema 106 STJ)",
-    description: "Liste TODOS os medicamentos do SUS já testados, com dose, duração e motivo da falha. É o ponto mais escrutinado pelo NATJUS.",
+    title: "3. Tratamentos prévios tentados",
+    description:
+      "Liste os medicamentos e terapias já testadas, com dose, duração e motivo da descontinuação. Esta seção fundamenta clinicamente a indicação do canabidiol.",
     fields: [
       {
         id: "tratamentos_lista",
-        label: "Medicamentos/terapias já utilizadas (incluir os disponíveis no SUS)",
+        label: "Medicamentos e terapias já utilizadas",
         type: "textarea",
         hint: "Para cada um: nome, dose máxima atingida, duração, motivo da suspensão (ineficácia / efeitos adversos / contraindicação).",
-        placeholder: "Ex.:\n• Sertralina 200 mg/dia por 8 meses — ineficácia parcial e ganho de peso de 12 kg\n• Clonazepam 4 mg/dia por 4 meses — sedação excessiva, queda postural\n• Quetiapina 300 mg/dia por 6 meses — síndrome metabólica\n• TCC semanal por 18 meses — sem resposta adequada",
+        placeholder:
+          "Ex.:\n• Sertralina 200 mg/dia por 8 meses — ineficácia parcial e ganho de peso de 12 kg\n• Clonazepam 4 mg/dia por 4 meses — sedação excessiva, queda postural\n• Quetiapina 300 mg/dia por 6 meses — síndrome metabólica\n• TCC semanal por 18 meses — sem resposta adequada",
         required: true,
+        voiceCapture: true,
+        defaultText:
+          "Foram tentadas as seguintes alternativas terapêuticas, sem resposta clínica satisfatória:\n• [medicamento 1] — dose, duração, motivo da descontinuação\n• [medicamento 2] — dose, duração, motivo da descontinuação\n• [medicamento 3] — dose, duração, motivo da descontinuação\n\n[Adicione terapias não-farmacológicas relevantes: fisioterapia, TCC, etc.]",
       },
       {
-        id: "tentativas_sus",
-        label: "O paciente tentou as alternativas oferecidas pelo SUS / RENAME?",
-        type: "yes-no",
-        required: true,
-      },
-      {
-        id: "ineficacia_sus_justificativa",
-        label: "Justifique a ineficácia ou inadequação dos fármacos do SUS",
+        id: "ineficacia_justificativa",
+        label: "Justificativa clínica da inadequação dos tratamentos prévios",
         type: "textarea",
-        hint: "Esta resposta é CRÍTICA — é o que o juiz mais analisa. Seja específico: por que cada classe falhou neste paciente?",
-        placeholder: "Ex.: ISRS, ISRSN e benzodiazepínicos foram tentados sem resposta clínica satisfatória. Antipsicóticos atípicos geraram síndrome metabólica grave. As alternativas RENAME foram esgotadas conforme detalhado acima...",
+        hint: "Por que cada classe terapêutica não foi adequada para este paciente?",
+        placeholder:
+          "Descreva clinicamente o que houve: ineficácia primária, perda de eficácia, efeitos adversos limitantes, contraindicações específicas.",
         required: true,
+        voiceCapture: true,
+        defaultText:
+          "Os tratamentos convencionais para {pathology} foram tentados sem êxito. As classes utilizadas apresentaram ineficácia primária, perda de resposta ao longo do tempo ou efeitos adversos limitantes que impediram a manutenção em doses terapêuticas. O paciente apresenta perfil de não-resposta às alternativas farmacológicas tradicionais para esta condição.",
       },
       {
         id: "efeitos_adversos_previos",
-        label: "Houve efeitos adversos significativos com os tratamentos anteriores?",
+        label: "Efeitos adversos significativos com tratamentos anteriores",
         type: "textarea",
-        placeholder: "Descreva efeitos adversos limitantes (síndrome metabólica, sedação excessiva, ganho de peso, sintomas extrapiramidais...)",
+        placeholder:
+          "Descreva efeitos adversos limitantes que prejudicaram a continuidade dos tratamentos.",
+        voiceCapture: true,
       },
     ],
   },
 
   // ═══ 4. JUSTIFICATIVA DO TRATAMENTO COM CANABIDIOL ═══
+  // Vem MUITO bem pré-preenchida, com referência específica à composição
+  // única dos produtos Greenlion. O médico ajusta o que precisar.
   {
     id: "justificativa_cbd",
-    title: "4. Justificativa Clínica do Canabidiol",
-    description: "Por que o canabidiol é a alternativa terapêutica adequada neste caso específico.",
+    title: "4. Justificativa clínica para o canabidiol",
+    description:
+      "Por que o canabidiol é a alternativa terapêutica adequada e por que esta formulação Greenlion específica é a melhor escolha para este caso.",
     fields: [
       {
         id: "fundamento_indicacao",
         label: "Fundamento clínico da indicação do canabidiol",
         type: "textarea",
-        hint: "Mecanismo de ação relevante para o caso, evidência científica disponível para esta patologia, perfil de segurança comparativo.",
-        placeholder: "Ex.: O canabidiol atua via modulação dos receptores CB1/CB2, 5-HT1A e TRPV1, com perfil de segurança superior aos benzodiazepínicos e antipsicóticos. Para fibromialgia, há evidência crescente em estudos como Boehnke 2022 (n=878), Wang 2021 (BMJ, 32 RCTs)...",
+        hint:
+          "Mecanismo de ação relevante para o caso, evidência científica, perfil de segurança comparativo.",
         required: true,
+        voiceCapture: true,
+        defaultText:
+          "O canabidiol atua de forma multimodal sobre o sistema endocanabinoide e em receptores envolvidos no controle dos sintomas de {pathology}. Sua ação se dá pela modulação dos receptores CB1 e CB2, agonismo parcial do receptor 5-HT1A (com efeito ansiolítico e antidepressivo), modulação de canais TRPV1 (com efeito analgésico e neuroprotetor) e interação com receptores PPAR-gama (com efeito anti-inflamatório). A literatura científica revisada por pares demonstra eficácia consistente do canabidiol para esta condição, com perfil de segurança superior ao das alternativas farmacológicas tradicionais. O canabidiol não causa dependência, não induz tolerância significativa em uso prolongado e tem perfil de efeitos adversos previsível e gerenciável.",
       },
       {
         id: "expectativa_resposta",
         label: "Expectativa de resposta terapêutica",
         type: "textarea",
-        placeholder: "Ex.: redução de pelo menos 30% nos sintomas em 12 semanas; melhora da qualidade do sono já no primeiro mês; redução do consumo de benzodiazepínicos...",
+        placeholder:
+          "Defina marcadores de melhora clínica esperados nos primeiros meses.",
+        voiceCapture: true,
+        defaultText:
+          "Espera-se redução clinicamente significativa dos sintomas em 8 a 12 semanas, com melhora da qualidade do sono já no primeiro mês de tratamento, redução do uso de medicamentos sintomáticos e recuperação progressiva da capacidade funcional. A reavaliação será feita por escalas validadas em consultas de acompanhamento.",
       },
       {
         id: "produto_escolhido_justificativa",
-        label: "Por que ESTE produto Greenlion específico?",
+        label: "Por que a formulação Greenlion específica foi escolhida",
         type: "textarea",
-        hint: "Justifica a escolha entre Linha Precision (HARMONY/BALANCE/RELIEF) ou Essential (BROAD/FULL SPECTRUM).",
-        placeholder: "Ex.: O paciente requer espectro completo para potencializar o efeito entourage (Pamplona 2018: 71% melhora vs 46% CBD purificado). A formulação BALANCE oferece o perfil ideal de canabinoides...",
+        hint:
+          "A Greenlion possui composição única no mercado brasileiro. Justifique por que ESTE produto é o mais adequado para este caso.",
         required: true,
+        voiceCapture: true,
+        defaultText:
+          "A formulação {product_label} foi escolhida por apresentar perfil de canabinoides otimizado para o quadro clínico do paciente. Diferente de produtos de canabidiol isolado, a formulação Greenlion contém {product_cannabinoids}, oferecendo o chamado 'efeito entourage' — sinergismo entre canabinoides e terpenos que potencializa a resposta clínica em comparação ao CBD isolado (Pamplona et al., 2018: 71% de melhora com espectro completo vs 46% com CBD purificado). A composição específica desta formulação atende às necessidades terapêuticas do quadro de {pathology}, sendo a opção mais adequada disponível no mercado brasileiro para este caso.",
       },
     ],
   },
@@ -197,15 +251,15 @@ export const ANAMNESE_SCHEMA: AnamneseSection[] = [
   // ═══ 5. PROTOCOLO TERAPÊUTICO ═══
   {
     id: "protocolo",
-    title: "5. Protocolo Terapêutico Proposto",
-    description: "Posologia, via, duração. Em judicialização, dose máxima fixa por 1 ano.",
+    title: "5. Protocolo terapêutico proposto",
+    description: "Posologia, via de administração, duração e plano de monitoramento.",
     fields: [
       {
         id: "posologia_resumo",
-        label: "Posologia (resumo)",
+        label: "Posologia",
         type: "textarea",
         autofill: true,
-        hint: "Auto-preenchido com base nos dados da prescrição.",
+        hint: "Preenchido automaticamente com base nos dados da prescrição.",
       },
       {
         id: "duracao_tratamento",
@@ -223,129 +277,104 @@ export const ANAMNESE_SCHEMA: AnamneseSection[] = [
         id: "monitoramento",
         label: "Plano de monitoramento e acompanhamento",
         type: "textarea",
-        placeholder: "Ex.: consultas mensais nos primeiros 3 meses, depois trimestrais. Reavaliação de escalas validadas a cada 6 meses. Hemograma e função hepática a cada 12 meses.",
+        placeholder:
+          "Frequência das consultas, exames de monitoramento, escalas de avaliação.",
+        voiceCapture: true,
+        defaultText:
+          "Acompanhamento médico mensal nos primeiros três meses para avaliação de tolerância e ajustes de dose. A partir do quarto mês, consultas trimestrais para reavaliação clínica. Aplicação de escalas validadas para a patologia em cada consulta. Hemograma e função hepática anuais como rotina de segurança.",
       },
     ],
   },
 
   // ═══ 6. RISCOS DE INTERRUPÇÃO ═══
+  // Mantém a seção (importante clinicamente) mas SEM termos jurídicos.
   {
     id: "riscos",
-    title: "6. Riscos de Interrupção do Tratamento",
-    description: "Fundamenta o periculum in mora — base para tutela de urgência (liminar).",
+    title: "6. Riscos clínicos da interrupção do tratamento",
+    description:
+      "Descreva o que acontece com o paciente — clinicamente — se o tratamento for interrompido ou postergado.",
     fields: [
       {
         id: "riscos_interrupcao",
-        label: "O que acontece se o tratamento for interrompido ou adiado?",
+        label: "Consequências clínicas da interrupção do tratamento",
         type: "textarea",
-        hint: "Seja específico e clínico. Descreva o quadro previsível, riscos à integridade física/psíquica, irreversibilidade.",
-        placeholder: "Ex.: A interrupção provocará retorno das crises convulsivas com risco de status epilepticus, dano cognitivo cumulativo e risco de morte súbita por SUDEP. Cada episódio convulsivo acumula dano neurológico irreversível...",
+        hint: "Descreva o quadro clinicamente previsível e os riscos à saúde do paciente.",
         required: true,
+        voiceCapture: true,
+        defaultText:
+          "A interrupção ou ausência de acesso ao tratamento implica retorno do quadro álgico e funcional em sua forma original, com retomada do ciclo de uso de medicamentos sintomáticos que já demonstraram efeitos adversos limitantes ou ineficácia neste paciente. Há risco de agravamento progressivo do quadro e de comorbidades secundárias, com prejuízo cumulativo à qualidade de vida e à capacidade funcional do paciente.",
       },
       {
         id: "urgencia",
-        label: "Há urgência no início ou continuidade do tratamento?",
+        label: "Há urgência clínica para o início ou continuidade do tratamento?",
         type: "yes-no",
         required: true,
       },
       {
         id: "urgencia_motivo",
-        label: "Justifique a urgência (se aplicável)",
+        label: "Motivo clínico da urgência (se aplicável)",
         type: "textarea",
-        placeholder: "Risco iminente, deterioração progressiva, janela terapêutica...",
+        placeholder: "Risco iminente, deterioração progressiva, janela terapêutica.",
+        voiceCapture: true,
       },
     ],
   },
 
-  // ═══ 7. HIPOSSUFICIÊNCIA ═══
+  // ═══ 7. CUSTO DO TRATAMENTO ═══
+  // Mantém para informação ao paciente. SEM termo jurídico de "hipossuficiência".
   {
-    id: "hipossuficiencia",
-    title: "7. Capacidade Financeira",
-    description: "Embora a comprovação principal seja documental (declarações, IR), o relatório médico pode mencionar o conhecimento do médico sobre a situação.",
+    id: "custo",
+    title: "7. Custo do tratamento",
+    description: "Informação sobre o custo mensal do produto, para conhecimento do paciente e família.",
     fields: [
       {
         id: "custo_mensal_estimado",
-        label: "Custo mensal estimado do tratamento (R$)",
+        label: "Custo mensal estimado do tratamento",
         type: "text",
-        placeholder: "Ex.: R$ 1.800,00 (1 frasco) ou R$ 3.600,00 (2 frascos)",
-      },
-      {
-        id: "hipossuficiencia_observacao",
-        label: "Observação sobre capacidade financeira (opcional)",
-        type: "textarea",
-        hint: "Apenas se for de conhecimento do médico. A comprovação principal será feita por documentos pelo advogado.",
-        placeholder: "Ex.: paciente desempregado por incapacidade laboral decorrente da própria doença, recebe BPC...",
+        placeholder: "Ex.: R$ 1.800,00 a R$ 3.600,00",
       },
     ],
   },
 
-  // ═══ 8. FUNDAMENTAÇÃO REGULATÓRIA ═══
-  {
-    id: "regulatorio",
-    title: "8. Fundamentação Regulatória",
-    description: "Bloco padrão — preenchido automaticamente. Confirma que o produto tem importação autorizada pela ANVISA.",
-    fields: [
-      {
-        id: "anvisa_autorizacao",
-        label: "O paciente possui autorização de importação ANVISA vigente?",
-        type: "yes-no-na",
-      },
-      {
-        id: "anvisa_processo",
-        label: "Número do processo ANVISA (se já solicitado)",
-        type: "text",
-        placeholder: "Ex.: 25351.123456/2026-78",
-      },
-      {
-        id: "rdc_660",
-        label: "Confirmação de enquadramento regulatório",
-        type: "textarea",
-        autofill: true,
-        hint: "Auto-preenchido com texto padrão sobre RDC 660/2022 e Tema 1161 STF.",
-      },
-    ],
-  },
-
-  // ═══ 9. CONCLUSÃO ═══
+  // ═══ 8. CONCLUSÃO ═══
+  // SEM "imprescindibilidade" como jargão jurídico. SEM "alternativas SUS"
+  // quando o paciente é particular. Texto se ajusta à cobertura.
   {
     id: "conclusao",
-    title: "9. Conclusão e Declaração",
-    description: "Texto formal de fechamento. Reforça a imprescindibilidade.",
+    title: "8. Conclusão clínica",
+    description: "Fechamento do relatório com a conclusão médica sobre o caso.",
     fields: [
       {
         id: "conclusao_texto",
-        label: "Conclusão e declaração de imprescindibilidade",
+        label: "Conclusão e indicação terapêutica",
         type: "textarea",
-        hint: "Texto formal. Deve afirmar a imprescindibilidade, reforçar que as alternativas SUS foram esgotadas, e que o medicamento é a melhor opção terapêutica disponível no momento.",
-        placeholder: "Ex.: Pelo exposto, atesto que o tratamento com [produto] é IMPRESCINDÍVEL para o paciente acima identificado, dado o quadro clínico apresentado, a falha das alternativas terapêuticas disponíveis no SUS e o perfil de segurança superior do canabidiol nas condições deste paciente. A interrupção ou ausência de acesso ao tratamento implicará em prejuízo grave e potencialmente irreversível à sua saúde...",
+        hint: "Resumo clínico final. Afirme a necessidade terapêutica do canabidiol para este paciente.",
         required: true,
+        voiceCapture: true,
+        defaultText:
+          "Pelo quadro clínico apresentado, pelos resultados insatisfatórios das alternativas terapêuticas previamente tentadas e pelo perfil de segurança e eficácia do canabidiol nesta condição, atesto que o tratamento com {product_label} é necessário e indicado para o paciente {patient_name}, sendo a melhor opção terapêutica disponível para o caso no momento atual. A continuidade do tratamento é fundamental para a manutenção da qualidade de vida e da capacidade funcional do paciente.",
       },
       {
         id: "observacoes_finais",
         label: "Observações adicionais (opcional)",
         type: "textarea",
-        placeholder: "Considerações adicionais que o médico julgue relevantes para o caso e o entendimento do juiz.",
+        placeholder: "Considerações clínicas adicionais relevantes ao caso.",
+        voiceCapture: true,
       },
     ],
   },
 ];
 
-/** Default empty record matching the schema. */
+// ═══════════════════════════════════════════════════════════════════
+// Tipos auxiliares e helpers
+// ═══════════════════════════════════════════════════════════════════
+
 export type AnamneseAnswers = Record<string, string>;
 
-/**
- * Custom field added by the doctor on-the-fly.
- * Allows the doctor to include information that isn't covered by the
- * standard schema but is relevant for the specific case.
- */
 export interface CustomAnamneseField {
-  /** Unique id (generated client-side, e.g. `custom_${timestamp}`). */
   id: string;
-  /** Question/title written by the doctor. */
   label: string;
-  /** Field rendering type — only short or long text for simplicity. */
   type: "text" | "textarea";
-  /** Doctor-provided value. */
   value: string;
 }
 
@@ -359,13 +388,43 @@ export function emptyAnamneseAnswers(): AnamneseAnswers {
   return empty;
 }
 
-/** Generates a unique id for a custom field. */
 export function makeCustomFieldId(): string {
   return `custom_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
-/** Returns a list of required fields that are empty. */
-export function getMissingRequiredFields(answers: AnamneseAnswers): { sectionId: string; fieldId: string; label: string }[] {
+/**
+ * Substitui {placeholders} nos textos default por dados reais do paciente
+ * e do produto. Usado para pré-preencher os campos da anamnese.
+ */
+export function fillDefaultText(text: string, ctx: AnamneseContext): string {
+  return text
+    .replace(/\{patient_name\}/g, ctx.patientName)
+    .replace(/\{pathology\}/g, ctx.pathology.toLowerCase())
+    .replace(/\{product_label\}/g, ctx.productLabel)
+    .replace(/\{product_line\}/g, ctx.productLine)
+    .replace(/\{product_cannabinoids\}/g, ctx.productCannabinoids)
+    .replace(/\{dose_summary\}/g, ctx.doseSummary);
+}
+
+/**
+ * Pré-preenche as respostas com os textos default do schema, contextualizados.
+ * Usado quando o médico abre a anamnese pela primeira vez.
+ */
+export function prefillAnamneseDefaults(ctx: AnamneseContext): AnamneseAnswers {
+  const answers = emptyAnamneseAnswers();
+  ANAMNESE_SCHEMA.forEach((section) => {
+    section.fields.forEach((field) => {
+      if (field.defaultText) {
+        answers[field.id] = fillDefaultText(field.defaultText, ctx);
+      }
+    });
+  });
+  return answers;
+}
+
+export function getMissingRequiredFields(
+  answers: AnamneseAnswers
+): { sectionId: string; fieldId: string; label: string }[] {
   const missing: { sectionId: string; fieldId: string; label: string }[] = [];
   ANAMNESE_SCHEMA.forEach((section) => {
     section.fields.forEach((field) => {

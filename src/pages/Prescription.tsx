@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, Check, Download, AlertTriangle, Search, Pencil, Save, X, ShoppingCart, Scale } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Download, AlertTriangle, Search, Pencil, Save, X, ShoppingCart, FileText, Stethoscope } from "lucide-react";
 import {
   PATHOLOGIES, PRODUCTS,
   getDoseRange, mgDayToDropsDay,
@@ -19,7 +19,7 @@ import {
   type PathologyInfo, type Product, type TitulationStep, type TitulationConfig,
 } from "@/lib/prescriptionData";
 import { PRESCRIPTION_PURPOSES, type PrescriptionPurpose } from "@/lib/prescriptionPurpose";
-import { type AnamneseAnswers, type CustomAnamneseField, emptyAnamneseAnswers } from "@/lib/anamneseSchema";
+import { type AnamneseAnswers, type CustomAnamneseField, emptyAnamneseAnswers, prefillAnamneseDefaults, type AnamneseContext } from "@/lib/anamneseSchema";
 import { generatePrescriptionPDF, generatePatientGuidePDF, generateLegalReportPDF } from "@/lib/pdfGenerator";
 import { ScientificReferencesCard } from "@/components/ScientificReferencesCard";
 import { AnamneseForm } from "@/components/AnamneseForm";
@@ -172,20 +172,27 @@ export default function Prescription() {
   // Recalculate titulation when relevant deps change
   useEffect(() => {
     if (!selectedProduct || !patient?.weight) return;
-    if (purpose === "JUDICIALIZACAO") {
-      // Judicialização: dose máxima fixa, 2 tomadas/dia.
-      // Frascos/mês = ceil(maintenanceDrops * 2 * 30 / dropsPerBottle).
+
+    // SEMPRE gera os passos de titulação — o Guia do Paciente precisa deles
+    // mesmo no fluxo de relatório detalhado, porque o paciente faz o ajuste
+    // gradual normalmente. O que muda no fluxo de relatório é apenas a
+    // validade da Receita (1 ano em vez de 30 dias).
+    const steps = generateTitulationProtocol(titConfig, selectedProduct, patient.weight);
+    setTitulationSteps(steps);
+
+    if (purpose === "RELATORIO_DETALHADO") {
+      // Em relatório detalhado: a quantidade prescrita por mês é baseada
+      // na DOSE MÁXIMA (uso contínuo após titulação). Frascos/mês =
+      // ceil(maintenanceDrops * 2 * 30 / dropsPerBottle).
       const dropsPerMonth = maintenanceDrops * 2 * 30;
       const bottlesPerMonth = Math.max(1, Math.ceil(dropsPerMonth / selectedProduct.dropsPerBottle));
       setEditableBottles(bottlesPerMonth);
-      setTitulationSteps([]);
       setBottleBreakdown([]);
       setTotalDrops30(dropsPerMonth);
       return;
     }
-    const steps = generateTitulationProtocol(titConfig, selectedProduct, patient.weight);
-    setTitulationSteps(steps);
 
+    // Padrão: quantidade calculada pelo cronograma de titulação
     const calc = calcBottlesFromSchedule(titConfig, selectedProduct);
     setBottleBreakdown(calc.weeklyBreakdown);
     setTotalDrops30(calc.totalDrops);
@@ -202,13 +209,59 @@ export default function Prescription() {
 
   useEffect(() => {
     if (selectedProduct) {
-      if (purpose === "JUDICIALIZACAO") {
+      if (purpose === "RELATORIO_DETALHADO") {
         setEditQuantity(`${editableBottles} frasco(s) de 30 mL/mês — uso contínuo · validade 1 ano`);
       } else {
         setEditQuantity(`${editableBottles} frasco(s) de 30 mL — 30 dias até retorno médico`);
       }
     }
   }, [editableBottles, selectedProduct, purpose]);
+
+  // Pré-preenche os textos da anamnese quando o médico chega ao Step 6 do
+  // fluxo de Relatório Detalhado pela primeira vez (sem sobrescrever se já
+  // editou algum campo). Os textos vêm contextualizados com nome do
+  // paciente, patologia, produto, etc.
+  useEffect(() => {
+    if (
+      step === 6 &&
+      purpose === "RELATORIO_DETALHADO" &&
+      patient &&
+      selectedPathology &&
+      selectedProduct
+    ) {
+      // Verifica se algum campo já tem texto — se sim, médico já editou,
+      // não sobrescreve nada.
+      const hasContent = Object.values(anamneseAnswers).some((v) => v && v.trim());
+      if (hasContent) return;
+
+      // Resumo dos canabinoides do produto, para ser inserido no defaultText
+      const cannabinoidsSummary = selectedProduct.cannabinoids
+        ?.slice(0, 4)
+        .map((c) => `${c.name}${c.percentage ? ` ${c.percentage}` : ""}`)
+        .join(", ") || "espectro completo de canabinoides";
+
+      const ctx: AnamneseContext = {
+        patientName: patient.full_name,
+        patientAge: patient.birth_date
+          ? Math.floor(
+              (Date.now() - new Date(patient.birth_date).getTime()) /
+                (365.25 * 24 * 60 * 60 * 1000)
+            )
+          : null,
+        pathology: selectedPathology.name,
+        productLabel: selectedProduct.fullLabel,
+        productLine: selectedProduct.productLine || "PRECISION",
+        productCannabinoids: cannabinoidsSummary,
+        doseSummary: `${maintenanceDrops} gotas a cada 12 horas (via ${via})`,
+        healthcareCoverage:
+          ((patient as { healthcare_coverage?: string }).healthcare_coverage as
+            "SUS" | "PLANO" | "PARTICULAR" | undefined) || "PARTICULAR",
+      };
+      setAnamneseAnswers(prefillAnamneseDefaults(ctx));
+    }
+    // Disparar apenas quando entrar no step 6 (não a cada mudança de answers)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, purpose, selectedPathology, selectedProduct]);
 
   const handleSaveAndDownload = async (docType: "receita" | "guia" | "ambos" | "relatorio") => {
     if (!user || !patient || !doctor || !selectedProduct || !selectedPathology) return;
@@ -231,15 +284,15 @@ export default function Prescription() {
       productFullLabel: selectedProduct.fullLabel,
       productComposition: selectedProduct.compositionLabel,
       receituarioType: selectedProduct.receituarioType,
-      isLegalCase: purpose === "JUDICIALIZACAO",
+      isLegalCase: purpose === "RELATORIO_DETALHADO",
     };
 
     // Payload extra com contexto de judicialização (vai no jsonb do Supabase, não nos PDFs)
     const prescriptionDataForStorage = {
       ...prescriptionData,
       purpose,
-      anamneseAnswers: purpose === "JUDICIALIZACAO" ? anamneseAnswers : null,
-      customAnamneseFields: purpose === "JUDICIALIZACAO" ? customAnamneseFields : null,
+      anamneseAnswers: purpose === "RELATORIO_DETALHADO" ? anamneseAnswers : null,
+      customAnamneseFields: purpose === "RELATORIO_DETALHADO" ? customAnamneseFields : null,
     };
 
     const insertData = {
@@ -279,7 +332,9 @@ export default function Prescription() {
           const m = today.getMonth() - dob.getMonth();
           if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) patientAge--;
         }
-        // Auto-preenche campos autofill da anamnese
+        // Auto-preenche apenas o resumo da posologia (campo autofill).
+        // Os demais campos vêm pré-preenchidos pelo prefillAnamneseDefaults
+        // quando o médico abre a anamnese pela primeira vez (Step 6).
         const dropsPerDose = maintenanceDrops;
         const mgCbdDay = +(dropsPerDose * mgCbdPerDrop * 2).toFixed(1);
         const mgCanDay = +(dropsPerDose * mgPerDrop * 2).toFixed(1);
@@ -288,10 +343,24 @@ export default function Prescription() {
           posologia_resumo: anamneseAnswers.posologia_resumo?.trim()
             ? anamneseAnswers.posologia_resumo
             : `${dropsPerDose} gota(s) por via ${titConfig.via || "sublingual"}, de 12 em 12 horas (${titConfig.time1 || "08:00"} e ${titConfig.time2 || "20:00"}). Dose diária: ${mgCanDay} mg de canabinoides totais (${mgCbdDay} mg de CBD). Quantidade: ${editableBottles} frasco(s)/mês. Validade: 1 ano.`,
-          rdc_660: anamneseAnswers.rdc_660?.trim()
-            ? anamneseAnswers.rdc_660
-            : "Produto à base de canabidiol importado por pessoa física para uso próprio, sob prescrição médica, com importação autorizada pela ANVISA. Enquadra-se no Tema 1161 do STF (RE 1.165.959): cabe ao Estado fornecer, em termos excepcionais, medicamento que, embora não possua registro na ANVISA, tem sua importação autorizada pela agência, quando comprovadas a hipossuficiência econômica e a imprescindibilidade clínica.",
         };
+
+        // Cobertura de saúde do paciente (campo no Supabase patients)
+        const coverage = ((patient as { healthcare_coverage?: string }).healthcare_coverage as
+          "SUS" | "PLANO" | "PARTICULAR" | undefined) || "PARTICULAR";
+
+        // Responsável legal (campos no Supabase patients) — apenas se preenchidos
+        const guardianName = (patient as { legal_guardian_name?: string }).legal_guardian_name;
+        const guardian = guardianName
+          ? {
+              name: guardianName,
+              cpf: (patient as { legal_guardian_cpf?: string }).legal_guardian_cpf || "",
+              rg: (patient as { legal_guardian_rg?: string | null }).legal_guardian_rg || null,
+              relationship: (patient as { legal_guardian_relationship?: string }).legal_guardian_relationship || "",
+              phone: (patient as { legal_guardian_phone?: string | null }).legal_guardian_phone || null,
+            }
+          : null;
+
         generateLegalReportPDF({
           doctor: pdfDoctor,
           patient,
@@ -300,6 +369,8 @@ export default function Prescription() {
           answers: filledAnswers,
           customFields: customAnamneseFields,
           patientAge,
+          healthcareCoverage: coverage,
+          legalGuardian: guardian,
         });
       }
       toast.success("PDF gerado com sucesso! Você pode gerar outro documento ou finalizar.");
@@ -565,7 +636,7 @@ export default function Prescription() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {PRESCRIPTION_PURPOSES.map((p) => {
                   const isSelected = purpose === p.id;
-                  const Icon = p.id === "JUDICIALIZACAO" ? Scale : ShoppingCart;
+                  const Icon = p.id === "RELATORIO_DETALHADO" ? Stethoscope : ShoppingCart;
                   return (
                     <div
                       key={p.id}
@@ -599,13 +670,13 @@ export default function Prescription() {
                 })}
               </div>
 
-              {purpose === "JUDICIALIZACAO" && (
-                <div className="p-3 rounded-lg border border-amber-300 bg-amber-50/50 dark:bg-amber-950/10 text-sm">
-                  <p className="font-medium text-amber-900 dark:text-amber-200 flex items-center gap-1">
-                    <AlertTriangle className="h-4 w-4" /> Atenção: fluxo de judicialização
+              {purpose === "RELATORIO_DETALHADO" && (
+                <div className="p-3 rounded-lg border border-primary/30 bg-primary-soft/40 text-sm">
+                  <p className="font-medium text-foreground flex items-center gap-1">
+                    <FileText className="h-4 w-4 text-primary" /> Anamnese expandida nas próximas etapas
                   </p>
-                  <p className="text-amber-900/80 dark:text-amber-200/80 text-xs mt-1">
-                    Você precisará preencher uma anamnese expandida nas próximas etapas. O sistema gerará um relatório médico circunstanciado conforme requisitos do Tema 106 do STJ e Tema 1161 do STF, para ser anexado ao processo pelo advogado do paciente.
+                  <p className="text-ink-soft text-xs mt-1">
+                    Você preencherá uma anamnese clínica detalhada para gerar o Relatório Médico Detalhado, com história da doença, tratamentos prévios e justificativa clínica do canabidiol. Cada campo já vem com texto sugerido — você pode aceitar e ajustar conforme o caso, ou usar o microfone para ditar a fala do paciente. A receita terá dose máxima estabelecida e validade estendida de 1 ano para garantir continuidade do tratamento.
                   </p>
                 </div>
               )}
@@ -801,7 +872,7 @@ export default function Prescription() {
                 <Button variant="outline" onClick={() => setStep(4)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
                 <Button
                   onClick={() => {
-                    if (purpose === "JUDICIALIZACAO" && selectedProduct && selectedPathology) {
+                    if (purpose === "RELATORIO_DETALHADO" && selectedProduct && selectedPathology) {
                       // Em judicialização, pré-calcula a dose máxima e validade de 1 ano.
                       // O Step 6 será a Anamnese Expandida (não a Posologia padrão).
                       const range = getDoseRange(selectedPathology, weight);
@@ -828,12 +899,12 @@ export default function Prescription() {
         )}
 
         {/* ═══ Step 6: Posologia (compra direta) | Anamnese Expandida (judicialização) ═══ */}
-        {step === 6 && selectedProduct && purpose === "JUDICIALIZACAO" && (
+        {step === 6 && selectedProduct && purpose === "RELATORIO_DETALHADO" && (
           <Card>
             <CardHeader>
-              <CardTitle>6. Anamnese Expandida</CardTitle>
+              <CardTitle>6. Anamnese clínica detalhada</CardTitle>
               <CardDescription>
-                Preencha os campos abaixo para gerar o Relatório Médico Circunstanciado (Tema 106 STJ + Tema 1161 STF). Quanto mais detalhado, maior a chance de tutela de urgência ser concedida.
+                Preencha os campos abaixo para gerar o Relatório Médico Detalhado. Cada campo já vem com texto sugerido — clique nele para editar conforme o caso, ou use o microfone para ditar / transcrever a fala do paciente.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -851,7 +922,7 @@ export default function Prescription() {
           </Card>
         )}
 
-        {step === 6 && selectedProduct && purpose !== "JUDICIALIZACAO" && (
+        {step === 6 && selectedProduct && purpose !== "RELATORIO_DETALHADO" && (
           <Card>
             <CardHeader>
               <CardTitle>6. Posologia</CardTitle>
@@ -978,7 +1049,7 @@ export default function Prescription() {
               )}
 
               {/* Bottle calculation */}
-              {purpose === "JUDICIALIZACAO" ? (
+              {purpose === "RELATORIO_DETALHADO" ? (
                 <div className="p-4 rounded-lg bg-muted space-y-3">
                   <p className="font-semibold">Cálculo de frascos (uso contínuo)</p>
                   <p className="text-sm">
@@ -1057,13 +1128,13 @@ export default function Prescription() {
               <CardDescription>Revise os dados e gere os PDFs. Todos os campos são editáveis.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {purpose === "JUDICIALIZACAO" && (
-                <div className="p-3 rounded-lg border-2 border-amber-300 bg-amber-50/50 dark:bg-amber-950/10 text-sm">
-                  <p className="font-semibold text-amber-900 dark:text-amber-200 flex items-center gap-2">
-                    <Scale className="h-4 w-4" /> Prescrição em fluxo de Judicialização
+              {purpose === "RELATORIO_DETALHADO" && (
+                <div className="p-3 rounded-lg border border-primary/30 bg-primary-soft/40 text-sm">
+                  <p className="font-semibold text-foreground flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-primary" /> Prescrição com relatório médico detalhado
                   </p>
-                  <p className="text-xs text-amber-900/80 dark:text-amber-200/80 mt-1">
-                    A receita será emitida com dose máxima fixa ({maintenanceDrops} gotas × 2/dia) e validade de 1 ano. Não haverá protocolo de titulação. O Relatório Médico Circunstanciado (Tema 106 STJ + Tema 1161 STF) deve ser entregue ao advogado para instruir a ação.
+                  <p className="text-xs text-ink-soft mt-1">
+                    A receita será emitida com dose máxima estabelecida ({maintenanceDrops} gotas × 2/dia) e validade de 1 ano para garantir continuidade do tratamento. O Guia do Paciente segue o protocolo padrão de titulação progressiva — o paciente faz o ajuste gradual normalmente, o que muda é apenas a validade da receita. O Relatório Médico Detalhado é gerado a partir da anamnese clínica preenchida.
                   </p>
                 </div>
               )}
@@ -1110,18 +1181,18 @@ export default function Prescription() {
                   <Button onClick={() => handleSaveAndDownload("guia")} disabled={saving} variant="outline">
                     <Download className="h-4 w-4 mr-1" /> {saving ? "Gerando..." : "Guia do Paciente (PDF)"}
                   </Button>
-                  {purpose === "JUDICIALIZACAO" && (
-                    <Button onClick={() => handleSaveAndDownload("relatorio")} disabled={saving} variant="outline" className="border-amber-300 hover:border-amber-400 hover:bg-amber-50/50 dark:hover:bg-amber-950/20">
-                      <Scale className="h-4 w-4 mr-1" /> {saving ? "Gerando..." : "Relatório Médico (PDF)"}
+                  {purpose === "RELATORIO_DETALHADO" && (
+                    <Button onClick={() => handleSaveAndDownload("relatorio")} disabled={saving} variant="outline" className="border-primary/40 hover:border-primary/60 hover:bg-primary-soft/40">
+                      <FileText className="h-4 w-4 mr-1" /> {saving ? "Gerando..." : "Relatório Médico Detalhado (PDF)"}
                     </Button>
                   )}
                   <Button onClick={() => handleSaveAndDownload("ambos")} disabled={saving}>
                     <Download className="h-4 w-4 mr-1" /> {saving ? "Gerando..." : "Gerar Receita + Guia"}
                   </Button>
                 </div>
-                {purpose === "JUDICIALIZACAO" && (
-                  <p className="text-xs text-muted-foreground italic">
-                    O Relatório Médico Circunstanciado é gerado a partir da anamnese expandida e deve ser entregue ao advogado para instruir a ação judicial.
+                {purpose === "RELATORIO_DETALHADO" && (
+                  <p className="text-xs text-ink-soft italic">
+                    O Relatório Médico Detalhado é gerado a partir da anamnese clínica que você preencheu na etapa anterior. É um documento médico fundamentado, sem termos jurídicos.
                   </p>
                 )}
               </div>

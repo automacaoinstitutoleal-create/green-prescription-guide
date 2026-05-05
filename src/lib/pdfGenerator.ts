@@ -260,8 +260,8 @@ export function generatePrescriptionPDF({ doctor, patient, prescriptionData: pd 
       { bold: true, gap: 1 }
     );
     y = drawCallout(doc, y,
-      "Validade da prescrição: 1 (um) ano a partir da data de emissão. Esta validade estendida visa garantir a continuidade do tratamento durante eventuais entraves no fornecimento judicial.",
-      { variant: "legal", title: "Validade especial", size: PDF_THEME.font.bodySm, gap: 4 }
+      "Validade da prescrição: 1 (um) ano a partir da data de emissão. Validade estendida para tratamento contínuo.",
+      { variant: "info", title: "Validade da prescrição", size: PDF_THEME.font.bodySm, gap: 4 }
     );
     y = writeParagraph(doc, y,
       "Acompanhamento clínico mínimo a cada 90 dias para reavaliação da resposta terapêutica.",
@@ -587,24 +587,36 @@ export function generatePatientGuidePDF({ doctor, patient, prescriptionData: pd,
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// RELATÓRIO MÉDICO CIRCUNSTANCIADO — Judicialização
+// RELATÓRIO MÉDICO DETALHADO
 //
-// Gerado a partir das respostas da Anamnese Expandida.
-// Atende:
-//  • Tema 106 STJ (REsp 1.657.156/RJ): laudo fundamentado e circunstanciado
-//  • Tema 1161 STF (RE 1.165.959): produto sem registro com importação ANVISA
+// Documento médico fundamentado, gerado a partir da anamnese clínica
+// detalhada. Sem termos jurídicos: a fundamentação processual é
+// responsabilidade do advogado, em outro documento.
+//
+// Adaptações conforme cobertura do paciente:
+//   • SUS: relata o esgotamento das alternativas disponíveis no sistema público
+//   • Plano/Particular: relata o esgotamento das alternativas terapêuticas
+//     convencionais sem mencionar SUS
 // ═══════════════════════════════════════════════════════════════════
 
 interface AnamneseAnswersForPdf {
   [key: string]: string;
 }
 
-/** Custom field added by the doctor (matches CustomAnamneseField in anamneseSchema). */
 interface LegalReportCustomField {
   id: string;
   label: string;
   type: "text" | "textarea";
   value: string;
+}
+
+/** Dados do responsável legal — incluídos apenas quando paciente é menor. */
+interface LegalGuardianInfo {
+  name: string;
+  cpf: string;
+  rg?: string | null;
+  relationship: string;
+  phone?: string | null;
 }
 
 interface LegalReportParams {
@@ -613,21 +625,26 @@ interface LegalReportParams {
   prescriptionData: PrescriptionInfo;
   product: Product;
   answers: AnamneseAnswersForPdf;
-  /** Custom fields the doctor added on-the-fly during the anamnesis. */
   customFields?: LegalReportCustomField[];
-  /** Patient's age computed at the time of report. */
   patientAge?: number | null;
+  /** Cobertura de saúde — afeta a redação. */
+  healthcareCoverage?: "SUS" | "PLANO" | "PARTICULAR";
+  /** Dados do responsável legal — usado quando paciente é menor. */
+  legalGuardian?: LegalGuardianInfo | null;
 }
 
-export function generateLegalReportPDF({ doctor, patient, prescriptionData: pd, product, answers, customFields, patientAge }: LegalReportParams) {
+export function generateLegalReportPDF({
+  doctor, patient, prescriptionData: pd, product, answers, customFields,
+  patientAge, healthcareCoverage = "PARTICULAR", legalGuardian,
+}: LegalReportParams) {
   const doc = new jsPDF();
-  const M = PDF_THEME.layout.marginX;
-  const CW = contentWidth(doc);
+  const isSUS = healthcareCoverage === "SUS";
+  const isMinorWithGuardian = legalGuardian && patientAge != null && patientAge < 18;
 
   // ─── Cabeçalho ───
   let y = drawPageHeader(doc, {
-    documentTitle: "Relatório Médico Circunstanciado",
-    documentSubtitle: "Pleito de fornecimento de medicamento — Tema 106 STJ · Tema 1161 STF",
+    documentTitle: "Relatório Médico Detalhado",
+    documentSubtitle: "Documento clínico fundamentado",
     doctor,
   });
 
@@ -655,7 +672,18 @@ export function generateLegalReportPDF({ doctor, patient, prescriptionData: pd, 
   if (patient.address) y = writeKeyValue(doc, y, "Endereço", patient.address, { gap: 1 });
   y += 2;
 
-  // ─── 1. História da Doença Atual ───
+  // ─── Responsável legal (apenas se menor de idade) ───
+  if (isMinorWithGuardian && legalGuardian) {
+    y = drawSectionHeader(doc, y, "Responsável legal");
+    y = writeKeyValue(doc, y, "Nome", legalGuardian.name, { gap: 1 });
+    const guardianId = [`CPF: ${legalGuardian.cpf}`, legalGuardian.rg ? `RG: ${legalGuardian.rg}` : null].filter(Boolean).join("  ·  ");
+    y = writeParagraph(doc, y, guardianId, { gap: 1 });
+    y = writeKeyValue(doc, y, "Vínculo com o paciente", legalGuardian.relationship, { gap: 1 });
+    if (legalGuardian.phone) y = writeKeyValue(doc, y, "Telefone", legalGuardian.phone, { gap: 1 });
+    y += 2;
+  }
+
+  // ─── 1. História da doença atual ───
   if (answers.inicio_sintomas || answers.evolucao || answers.sintomas_atuais || answers.impacto_funcional || answers.exames_realizados) {
     y = drawSectionHeader(doc, y, "História da doença atual", { number: 1 });
     if (answers.inicio_sintomas) y = writeKeyValue(doc, y, "Início dos sintomas", answers.inicio_sintomas, { gap: 2 });
@@ -691,26 +719,20 @@ export function generateLegalReportPDF({ doctor, patient, prescriptionData: pd, 
   y = writeParagraph(doc, y, pd.pathology, { bold: true, gap: 1 });
   y = writeKeyValue(doc, y, "CID-10", pd.cid10, { gap: 2 });
 
-  // ─── 4. Tratamentos prévios — CRÍTICO ───
-  y = drawSectionHeader(doc, y, "Tratamentos prévios e ineficácia das alternativas do SUS", { number: 4 });
-  y = drawCallout(doc, y,
-    "Esta seção atende ao requisito (i) do Tema 106 do STJ: comprovação, por meio de laudo médico fundamentado e circunstanciado, da imprescindibilidade do medicamento e da ineficácia, para o tratamento da moléstia, dos fármacos fornecidos pelo SUS.",
-    { variant: "legal", title: "Fundamentação legal", size: PDF_THEME.font.bodySm, gap: 4 }
-  );
+  // ─── 4. Tratamentos prévios ───
+  // Título e texto se ajustam ao perfil de cobertura.
+  const treatmentSectionTitle = isSUS
+    ? "Tratamentos prévios e esgotamento das alternativas disponíveis"
+    : "Tratamentos prévios tentados";
+  y = drawSectionHeader(doc, y, treatmentSectionTitle, { number: 4 });
 
   if (answers.tratamentos_lista) {
     y = writeParagraph(doc, y, "Histórico de medicamentos e terapias utilizadas:", { bold: true, gap: 1 });
     y = writeParagraph(doc, y, answers.tratamentos_lista, { gap: 3 });
   }
-  if (answers.tentativas_sus) {
-    const text = answers.tentativas_sus === "sim"
-      ? "O paciente tentou as alternativas terapêuticas oferecidas pelo SUS e pelo RENAME para esta condição."
-      : "As alternativas terapêuticas oferecidas pelo SUS e pelo RENAME não foram adequadas ou aplicáveis a este paciente.";
-    y = writeParagraph(doc, y, text, { gap: 2 });
-  }
-  if (answers.ineficacia_sus_justificativa) {
-    y = writeParagraph(doc, y, "Justificativa da ineficácia dos fármacos do SUS para este paciente:", { bold: true, gap: 1 });
-    y = writeParagraph(doc, y, answers.ineficacia_sus_justificativa, { gap: 3 });
+  if (answers.ineficacia_justificativa) {
+    y = writeParagraph(doc, y, "Justificativa clínica da inadequação dos tratamentos prévios:", { bold: true, gap: 1 });
+    y = writeParagraph(doc, y, answers.ineficacia_justificativa, { gap: 3 });
   }
   if (answers.efeitos_adversos_previos) {
     y = writeKeyValue(doc, y, "Efeitos adversos significativos com tratamentos anteriores", answers.efeitos_adversos_previos, { gap: 2 });
@@ -727,7 +749,7 @@ export function generateLegalReportPDF({ doctor, patient, prescriptionData: pd, 
     y = writeParagraph(doc, y, answers.expectativa_resposta, { gap: 2 });
   }
   if (answers.produto_escolhido_justificativa) {
-    y = writeParagraph(doc, y, "Justificativa da escolha deste produto específico:", { bold: true, gap: 1 });
+    y = writeParagraph(doc, y, "Justificativa da escolha do produto:", { bold: true, gap: 1 });
     y = writeParagraph(doc, y, answers.produto_escolhido_justificativa, { gap: 2 });
   }
 
@@ -761,93 +783,53 @@ export function generateLegalReportPDF({ doctor, patient, prescriptionData: pd, 
     y = writeParagraph(doc, y, "Plano de monitoramento e acompanhamento:", { bold: true, gap: 1 });
     y = writeParagraph(doc, y, answers.monitoramento, { gap: 2 });
   }
-  y = drawCallout(doc, y,
-    `Quantidade prescrita: ${pd.bottles} frasco(s) por mês. Receita emitida com validade de 1 (um) ano para garantir a continuidade do tratamento durante eventuais entraves no fornecimento judicial.`,
-    { variant: "legal", title: "Quantidade e validade da prescrição", size: PDF_THEME.font.bodySm, gap: 4 }
-  );
+  y = writeKeyValue(doc, y, "Quantidade prescrita por mês", `${pd.bottles} frasco(s) de 30 mL`, { gap: 2 });
 
-  // ─── 8. Riscos da Interrupção ───
+  // ─── 8. Riscos clínicos da interrupção ───
   if (answers.riscos_interrupcao || answers.urgencia === "sim" || answers.urgencia_motivo) {
-    y = drawSectionHeader(doc, y, "Riscos da interrupção do tratamento (periculum in mora)", { number: 8 });
-    y = drawCallout(doc, y,
-      "Esta seção fundamenta o pedido de tutela de urgência (liminar) ao demonstrar o risco concreto à saúde do paciente em caso de interrupção ou postergação do tratamento.",
-      { variant: "legal", title: "Fundamentação para tutela de urgência", size: PDF_THEME.font.bodySm, gap: 4 }
-    );
+    y = drawSectionHeader(doc, y, "Riscos clínicos da interrupção do tratamento", { number: 8 });
     if (answers.riscos_interrupcao) {
       y = writeParagraph(doc, y, answers.riscos_interrupcao, { gap: 2 });
     }
     if (answers.urgencia === "sim") {
       y = writeParagraph(doc, y,
-        "Há urgência clínica reconhecida pelo médico assistente para o início ou a continuidade imediata do tratamento.",
+        "Há urgência clínica reconhecida pelo médico assistente para o início ou continuidade imediata do tratamento.",
         { bold: true, gap: 2 }
       );
     }
     if (answers.urgencia_motivo) {
-      y = writeKeyValue(doc, y, "Justificativa específica da urgência", answers.urgencia_motivo, { gap: 2 });
+      y = writeKeyValue(doc, y, "Motivo clínico da urgência", answers.urgencia_motivo, { gap: 2 });
     }
   }
 
-  // ─── 9. Hipossuficiência ───
-  if (answers.custo_mensal_estimado || answers.hipossuficiencia_observacao) {
-    y = drawSectionHeader(doc, y, "Custo do tratamento e capacidade financeira", { number: 9 });
-    y = drawCallout(doc, y,
-      "A comprovação documental da hipossuficiência financeira é responsabilidade do advogado (declaração de rendimentos, IR, comprovantes de despesas). As informações abaixo são prestadas pelo conhecimento clínico do médico assistente.",
-      { variant: "info", size: PDF_THEME.font.bodySm, gap: 4 }
-    );
-    if (answers.custo_mensal_estimado) {
-      y = writeKeyValue(doc, y, "Custo mensal estimado do tratamento", answers.custo_mensal_estimado, { gap: 2 });
-    }
-    if (answers.hipossuficiencia_observacao) {
-      y = writeParagraph(doc, y, answers.hipossuficiencia_observacao, { gap: 2 });
-    }
+  // ─── 9. Custo do tratamento ───
+  if (answers.custo_mensal_estimado) {
+    y = drawSectionHeader(doc, y, "Custo do tratamento", { number: 9 });
+    y = writeKeyValue(doc, y, "Custo mensal estimado", answers.custo_mensal_estimado, { gap: 2 });
   }
 
-  // ─── 10. Fundamentação Regulatória ───
-  y = drawSectionHeader(doc, y, "Fundamentação regulatória", { number: 10 });
-  y = drawCallout(doc, y,
-    "Esta seção atende ao requisito (iii) do Tema 106 do STJ, na forma do Tema 1161 do STF: o medicamento, embora sem registro em listas de dispensação do SUS, possui importação autorizada pela ANVISA por pessoa física para uso próprio mediante prescrição médica.",
-    { variant: "legal", title: "Tema 106 STJ · Tema 1161 STF", size: PDF_THEME.font.bodySm, gap: 4 }
-  );
-  y = writeParagraph(doc, y,
-    "O produto prescrito é regularmente importado por pessoa física para uso próprio, sob prescrição médica, conforme regulamentação da ANVISA. A regulamentação vigente permite a importação para fins terapêuticos com a devida autorização sanitária individual.",
-    { gap: 2 }
-  );
-  if (answers.anvisa_autorizacao === "sim") {
-    y = writeParagraph(doc, y, "O paciente já possui autorização de importação ANVISA vigente.", { gap: 2 });
-  } else if (answers.anvisa_autorizacao === "solicitando") {
-    y = writeParagraph(doc, y, "A autorização de importação ANVISA está em processo de solicitação.", { gap: 2 });
-  } else if (answers.anvisa_autorizacao === "nao") {
-    y = writeParagraph(doc, y, "A autorização de importação ANVISA será solicitada após a confirmação do tratamento.", { gap: 2 });
-  }
-  if (answers.anvisa_processo) {
-    y = writeKeyValue(doc, y, "Número do processo ANVISA", answers.anvisa_processo, { gap: 2 });
-  }
-
-  // ─── 11. Informações Adicionais (campos personalizados do médico) ───
+  // ─── 10. Informações Adicionais (campos custom) ───
   const filledCustomFields = (customFields || []).filter((f) => f.value && f.value.trim());
-  let conclusionNumber = 11;
+  let conclusionNumber = 10;
   if (filledCustomFields.length > 0) {
-    y = drawSectionHeader(doc, y, "Informações adicionais relatadas pelo médico assistente", { number: 11 });
-    y = drawCallout(doc, y,
-      "Os itens abaixo foram acrescentados pelo médico assistente para detalhar aspectos do caso que não estão cobertos pelas seções anteriores.",
-      { variant: "info", size: PDF_THEME.font.bodySm, gap: 4 }
-    );
+    y = drawSectionHeader(doc, y, "Informações adicionais relatadas pelo médico assistente", { number: 10 });
     filledCustomFields.forEach((field) => {
       const labelClean = field.label.replace(/[:?]+\s*$/, "");
       y = writeKeyValue(doc, y, labelClean, field.value, { gap: 2 });
     });
-    conclusionNumber = 12;
+    conclusionNumber = 11;
   }
 
-  // ─── Conclusão ───
-  y = drawSectionHeader(doc, y, "Conclusão e declaração de imprescindibilidade", { number: conclusionNumber });
+  // ─── Conclusão clínica ───
+  y = drawSectionHeader(doc, y, "Conclusão clínica", { number: conclusionNumber });
   if (answers.conclusao_texto) {
     y = writeParagraph(doc, y, answers.conclusao_texto, { gap: 2 });
   } else {
-    y = writeParagraph(doc, y,
-      `Pelo exposto, ATESTO que o tratamento com ${pd.productFullLabel} é IMPRESCINDÍVEL para o paciente acima identificado, considerando o quadro clínico apresentado, a falha das alternativas terapêuticas disponíveis no SUS e o perfil de segurança e eficácia do canabidiol nas condições deste paciente. A interrupção ou ausência de acesso ao tratamento implicará prejuízo grave e potencialmente irreversível à sua saúde, conforme detalhado nas seções anteriores.`,
-      { gap: 2 }
-    );
+    // Fallback ajustado conforme cobertura
+    const fallbackText = isSUS
+      ? `Pelo exposto, atesto que o tratamento com ${pd.productFullLabel} é necessário e indicado para o paciente acima identificado, considerando o quadro clínico apresentado, o esgotamento das alternativas terapêuticas disponíveis no sistema público de saúde e o perfil de segurança e eficácia do canabidiol nas condições deste paciente. A continuidade do tratamento é fundamental para a manutenção da qualidade de vida e da capacidade funcional do paciente.`
+      : `Pelo exposto, atesto que o tratamento com ${pd.productFullLabel} é necessário e indicado para o paciente acima identificado, considerando o quadro clínico apresentado, os resultados insatisfatórios das alternativas terapêuticas previamente tentadas e o perfil de segurança e eficácia do canabidiol nas condições deste paciente. A continuidade do tratamento é fundamental para a manutenção da qualidade de vida e da capacidade funcional do paciente.`;
+    y = writeParagraph(doc, y, fallbackText, { gap: 2 });
   }
   if (answers.observacoes_finais) {
     y = writeParagraph(doc, y, "Observações adicionais:", { bold: true, gap: 1 });
@@ -863,7 +845,7 @@ export function generateLegalReportPDF({ doctor, patient, prescriptionData: pd, 
 
   // ─── Rodapé padronizado ───
   drawPageFooter(doc, {
-    text: `Relatório Médico · ${patient.full_name}`,
+    text: `Relatório Médico Detalhado · ${patient.full_name}`,
     doctorName: doctor.full_name,
     doctorCrm: doctor.crm,
   });

@@ -53,7 +53,7 @@ export default function Profile() {
     <AppShell
       pageEyebrow="Identificação profissional"
       pageTitle="Meu perfil"
-      pageDescription="Estes dados aparecem nas receitas, no Guia do Paciente e no Relatório Médico Circunstanciado."
+      pageDescription="Estes dados aparecem nas receitas, no Guia do Paciente e no Relatório Médico Detalhado."
       breadcrumbs={[{ label: "Pacientes", href: "/" }, { label: "Meu perfil" }]}
     >
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
@@ -144,7 +144,7 @@ export default function Profile() {
             <ul className="space-y-1.5 text-[12.5px] text-ink-soft">
               <li>· CFM 2.113/2014 — prescrição de canabidiol</li>
               <li>· LGPD — proteção de dados clínicos</li>
-              <li>· Tema 106 STJ — judicialização</li>
+              <li>· RDC 660/2022 — importação por pessoa física</li>
             </ul>
           </div>
         </aside>

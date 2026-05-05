@@ -83,7 +83,7 @@ export default function Login() {
           {[
             { icon: Stethoscope, title: "Titulação por peso", body: "Cálculo automático da dose mg/kg/dia." },
             { icon: FileText, title: "Receita + Guia", body: "PDFs prontos para impressão e arquivo." },
-            { icon: ShieldCheck, title: "Judicialização", body: "Relatório circunstanciado conforme Tema 106 STJ." },
+            { icon: ShieldCheck, title: "Relatório detalhado", body: "Anamnese expandida com pré-preenchimento e captura de voz." },
             { icon: BookOpen, title: "Biblioteca", body: "Referências peer-reviewed organizadas por patologia." },
           ].map(({ icon: Icon, title, body }) => (
             <div key={title} className="flex gap-3">
