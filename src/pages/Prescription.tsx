@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, Check, Download, AlertTriangle, Search, Pencil, Save, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Download, AlertTriangle, Search, Pencil, Save, X, ShoppingCart, FileText, Stethoscope } from "lucide-react";
 import {
   PATHOLOGIES, PRODUCTS,
   getDoseRange, mgDayToDropsDay,
@@ -18,8 +18,13 @@ import {
   isProductAvailableForPathology,
   type PathologyInfo, type Product, type TitulationStep, type TitulationConfig,
 } from "@/lib/prescriptionData";
-import { generatePrescriptionPDF, generatePatientGuidePDF } from "@/lib/pdfGenerator";
+import { PRESCRIPTION_PURPOSES, type PrescriptionPurpose } from "@/lib/prescriptionPurpose";
+import { type AnamneseAnswers, type CustomAnamneseField, emptyAnamneseAnswers, prefillAnamneseDefaults, type AnamneseContext } from "@/lib/anamneseSchema";
+import { generatePrescriptionPDF, generatePatientGuidePDF, generateLegalReportPDF } from "@/lib/pdfGenerator";
 import { ScientificReferencesCard } from "@/components/ScientificReferencesCard";
+import { AnamneseForm } from "@/components/AnamneseForm";
+import { AppShell } from "@/components/AppShell";
+import { cn } from "@/lib/utils";
 
 interface Patient {
   id: string;
@@ -45,6 +50,9 @@ export default function Prescription() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
+  const [purpose, setPurpose] = useState<PrescriptionPurpose | null>(null);
+  const [anamneseAnswers, setAnamneseAnswers] = useState<AnamneseAnswers>(emptyAnamneseAnswers());
+  const [customAnamneseFields, setCustomAnamneseFields] = useState<CustomAnamneseField[]>([]);
   const [patient, setPatient] = useState<Patient | null>(null);
   const [doctor, setDoctor] = useState<DoctorProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -164,14 +172,32 @@ export default function Prescription() {
   // Recalculate titulation when relevant deps change
   useEffect(() => {
     if (!selectedProduct || !patient?.weight) return;
+
+    // SEMPRE gera os passos de titulação — o Guia do Paciente precisa deles
+    // mesmo no fluxo de relatório detalhado, porque o paciente faz o ajuste
+    // gradual normalmente. O que muda no fluxo de relatório é apenas a
+    // validade da Receita (1 ano em vez de 30 dias).
     const steps = generateTitulationProtocol(titConfig, selectedProduct, patient.weight);
     setTitulationSteps(steps);
 
+    if (purpose === "RELATORIO_DETALHADO") {
+      // Em relatório detalhado: a quantidade prescrita por mês é baseada
+      // na DOSE MÁXIMA (uso contínuo após titulação). Frascos/mês =
+      // ceil(maintenanceDrops * 2 * 30 / dropsPerBottle).
+      const dropsPerMonth = maintenanceDrops * 2 * 30;
+      const bottlesPerMonth = Math.max(1, Math.ceil(dropsPerMonth / selectedProduct.dropsPerBottle));
+      setEditableBottles(bottlesPerMonth);
+      setBottleBreakdown([]);
+      setTotalDrops30(dropsPerMonth);
+      return;
+    }
+
+    // Padrão: quantidade calculada pelo cronograma de titulação
     const calc = calcBottlesFromSchedule(titConfig, selectedProduct);
     setBottleBreakdown(calc.weeklyBreakdown);
     setTotalDrops30(calc.totalDrops);
     setEditableBottles(calc.bottles);
-  }, [selectedProduct, patient?.weight, titConfig]);
+  }, [selectedProduct, patient?.weight, titConfig, purpose, maintenanceDrops]);
 
   // Set edit fields when pathology changes
   useEffect(() => {
@@ -183,11 +209,61 @@ export default function Prescription() {
 
   useEffect(() => {
     if (selectedProduct) {
-      setEditQuantity(`${editableBottles} frasco(s) de 30 mL — 30 dias até retorno médico`);
+      if (purpose === "RELATORIO_DETALHADO") {
+        setEditQuantity(`${editableBottles} frasco(s) de 30 mL/mês — uso contínuo · validade 1 ano`);
+      } else {
+        setEditQuantity(`${editableBottles} frasco(s) de 30 mL — 30 dias até retorno médico`);
+      }
     }
-  }, [editableBottles, selectedProduct]);
+  }, [editableBottles, selectedProduct, purpose]);
 
-  const handleSaveAndDownload = async (docType: "receita" | "guia" | "ambos") => {
+  // Pré-preenche os textos da anamnese quando o médico chega ao Step 6 do
+  // fluxo de Relatório Detalhado pela primeira vez (sem sobrescrever se já
+  // editou algum campo). Os textos vêm contextualizados com nome do
+  // paciente, patologia, produto, etc.
+  useEffect(() => {
+    if (
+      step === 6 &&
+      purpose === "RELATORIO_DETALHADO" &&
+      patient &&
+      selectedPathology &&
+      selectedProduct
+    ) {
+      // Verifica se algum campo já tem texto — se sim, médico já editou,
+      // não sobrescreve nada.
+      const hasContent = Object.values(anamneseAnswers).some((v) => v && v.trim());
+      if (hasContent) return;
+
+      // Resumo dos canabinoides do produto, para ser inserido no defaultText
+      const cannabinoidsSummary = selectedProduct.cannabinoids
+        ?.slice(0, 4)
+        .map((c) => `${c.name}${c.percentage ? ` ${c.percentage}` : ""}`)
+        .join(", ") || "espectro completo de canabinoides";
+
+      const ctx: AnamneseContext = {
+        patientName: patient.full_name,
+        patientAge: patient.birth_date
+          ? Math.floor(
+              (Date.now() - new Date(patient.birth_date).getTime()) /
+                (365.25 * 24 * 60 * 60 * 1000)
+            )
+          : null,
+        pathology: selectedPathology.name,
+        productLabel: selectedProduct.fullLabel,
+        productLine: selectedProduct.productLine || "PRECISION",
+        productCannabinoids: cannabinoidsSummary,
+        doseSummary: `${maintenanceDrops} gotas a cada 12 horas (via ${via})`,
+        healthcareCoverage:
+          ((patient as { healthcare_coverage?: string }).healthcare_coverage as
+            "SUS" | "PLANO" | "PARTICULAR" | undefined) || "PARTICULAR",
+      };
+      setAnamneseAnswers(prefillAnamneseDefaults(ctx));
+    }
+    // Disparar apenas quando entrar no step 6 (não a cada mudança de answers)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, purpose, selectedPathology, selectedProduct]);
+
+  const handleSaveAndDownload = async (docType: "receita" | "guia" | "ambos" | "relatorio") => {
     if (!user || !patient || !doctor || !selectedProduct || !selectedPathology) return;
     setSaving(true);
 
@@ -208,6 +284,15 @@ export default function Prescription() {
       productFullLabel: selectedProduct.fullLabel,
       productComposition: selectedProduct.compositionLabel,
       receituarioType: selectedProduct.receituarioType,
+      isLegalCase: purpose === "RELATORIO_DETALHADO",
+    };
+
+    // Payload extra com contexto de judicialização (vai no jsonb do Supabase, não nos PDFs)
+    const prescriptionDataForStorage = {
+      ...prescriptionData,
+      purpose,
+      anamneseAnswers: purpose === "RELATORIO_DETALHADO" ? anamneseAnswers : null,
+      customAnamneseFields: purpose === "RELATORIO_DETALHADO" ? customAnamneseFields : null,
     };
 
     const insertData = {
@@ -219,7 +304,7 @@ export default function Prescription() {
       calculated_dose: maintenanceDrops * 2 * mgCbdPerDrop,
       titulation_protocol: JSON.parse(JSON.stringify(titulationSteps)),
       tcle_accepted: docType === "guia" || docType === "ambos",
-      prescription_data: JSON.parse(JSON.stringify(prescriptionData)),
+      prescription_data: JSON.parse(JSON.stringify(prescriptionDataForStorage)),
     };
 
     const { error } = await supabase.from("prescriptions").insert(insertData);
@@ -237,6 +322,57 @@ export default function Prescription() {
       if (docType === "guia" || docType === "ambos") {
         generatePatientGuidePDF({ doctor: pdfDoctor, patient, prescriptionData, product: selectedProduct });
       }
+      if (docType === "relatorio") {
+        // Calcula idade do paciente
+        let patientAge: number | null = null;
+        if (patient.birth_date) {
+          const dob = new Date(patient.birth_date);
+          const today = new Date();
+          patientAge = today.getFullYear() - dob.getFullYear();
+          const m = today.getMonth() - dob.getMonth();
+          if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) patientAge--;
+        }
+        // Auto-preenche apenas o resumo da posologia (campo autofill).
+        // Os demais campos vêm pré-preenchidos pelo prefillAnamneseDefaults
+        // quando o médico abre a anamnese pela primeira vez (Step 6).
+        const dropsPerDose = maintenanceDrops;
+        const mgCbdDay = +(dropsPerDose * mgCbdPerDrop * 2).toFixed(1);
+        const mgCanDay = +(dropsPerDose * mgPerDrop * 2).toFixed(1);
+        const filledAnswers = {
+          ...anamneseAnswers,
+          posologia_resumo: anamneseAnswers.posologia_resumo?.trim()
+            ? anamneseAnswers.posologia_resumo
+            : `${dropsPerDose} gota(s) por via ${titConfig.via || "sublingual"}, de 12 em 12 horas (${titConfig.time1 || "08:00"} e ${titConfig.time2 || "20:00"}). Dose diária: ${mgCanDay} mg de canabinoides totais (${mgCbdDay} mg de CBD). Quantidade: ${editableBottles} frasco(s)/mês. Validade: 1 ano.`,
+        };
+
+        // Cobertura de saúde do paciente (campo no Supabase patients)
+        const coverage = ((patient as { healthcare_coverage?: string }).healthcare_coverage as
+          "SUS" | "PLANO" | "PARTICULAR" | undefined) || "PARTICULAR";
+
+        // Responsável legal (campos no Supabase patients) — apenas se preenchidos
+        const guardianName = (patient as { legal_guardian_name?: string }).legal_guardian_name;
+        const guardian = guardianName
+          ? {
+              name: guardianName,
+              cpf: (patient as { legal_guardian_cpf?: string }).legal_guardian_cpf || "",
+              rg: (patient as { legal_guardian_rg?: string | null }).legal_guardian_rg || null,
+              relationship: (patient as { legal_guardian_relationship?: string }).legal_guardian_relationship || "",
+              phone: (patient as { legal_guardian_phone?: string | null }).legal_guardian_phone || null,
+            }
+          : null;
+
+        generateLegalReportPDF({
+          doctor: pdfDoctor,
+          patient,
+          prescriptionData,
+          product: selectedProduct,
+          answers: filledAnswers,
+          customFields: customAnamneseFields,
+          patientAge,
+          healthcareCoverage: coverage,
+          legalGuardian: guardian,
+        });
+      }
       toast.success("PDF gerado com sucesso! Você pode gerar outro documento ou finalizar.");
     } catch (e) {
       console.error("Erro ao gerar PDF:", e);
@@ -247,38 +383,103 @@ export default function Prescription() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-      </div>
+      <AppShell pageTitle="Carregando…">
+        <div className="card-editorial p-12 text-center">
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
+        </div>
+      </AppShell>
     );
   }
 
   if (!patient) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p>Paciente não encontrado.</p>
-      </div>
+      <AppShell pageTitle="Paciente não encontrado">
+        <div className="card-editorial p-12 text-center">
+          <p className="text-[14px] text-ink-soft">
+            O paciente solicitado não foi encontrado em sua conta.
+          </p>
+          <Button onClick={() => navigate("/")} className="mt-5">
+            Voltar para a lista
+          </Button>
+        </div>
+      </AppShell>
     );
   }
 
   const weight = patient.weight || 0;
   const doseRange = selectedPathology ? getDoseRange(selectedPathology, weight) : null;
 
-  return (
-    <div className="min-h-screen bg-secondary/20 p-4">
-      <div className="mx-auto max-w-4xl">
-        <Button variant="ghost" onClick={() => navigate("/")} className="mb-4">
-          <ArrowLeft className="h-4 w-4 mr-1" /> Voltar ao Dashboard
-        </Button>
+  const STEP_LABELS = ["Médico", "Paciente", "Finalidade", "Patologia", "Produto", "Posologia", "Revisão"];
+  const totalSteps = 6;
 
-        {/* Progress */}
-        <div className="mb-6 flex items-center gap-1">
-          {[1, 2, 3, 4, 5, 6].map((s) => (
-            <div key={s} className={`h-2 flex-1 rounded-full ${s <= step ? "bg-primary" : "bg-border"}`} />
-          ))}
+  return (
+    <AppShell
+      pageEyebrow="Nova prescrição"
+      pageTitle={`Receita para ${patient.full_name}`}
+      pageDescription={
+        <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px]">
+          <span>
+            <span className="font-mono">CPF {patient.cpf}</span>
+            {patient.weight && <> · <span className="font-mono tabular">{patient.weight} kg</span></>}
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 text-warning text-[11px]">
+            <AlertTriangle className="h-3 w-3" />
+            Sugestões baseadas em literatura. O médico tem autonomia para ajustar.
+          </span>
+        </span>
+      }
+      breadcrumbs={[
+        { label: "Pacientes", href: "/" },
+        { label: patient.full_name, href: `/pacientes/${patient.id}/historico` },
+        { label: "Nova receita" },
+      ]}
+    >
+      <div className="mx-auto max-w-4xl">
+        {/* ─── Stepper editorial ─── */}
+        <div className="card-editorial mb-6 px-5 py-4">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="eyebrow">Progresso da prescrição</p>
+            <p className="font-mono text-[11.5px] tabular text-ink-soft">
+              Etapa {step} de {totalSteps}
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {Array.from({ length: totalSteps }, (_, i) => i + 1).map((s) => {
+              const done = s < step;
+              const active = s === step;
+              return (
+                <div
+                  key={s}
+                  className="flex flex-1 items-center gap-1.5"
+                  aria-current={active ? "step" : undefined}
+                >
+                  <div
+                    className={cn(
+                      "h-1.5 flex-1 rounded-full transition-colors",
+                      done && "bg-primary",
+                      active && "bg-primary",
+                      !done && !active && "bg-border"
+                    )}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-2.5 hidden grid-cols-7 text-[10.5px] text-ink-soft sm:grid">
+            {STEP_LABELS.map((lbl, i) => (
+              <span
+                key={lbl}
+                className={cn(
+                  "uppercase tracking-wider",
+                  i + 1 === step && "font-semibold text-primary",
+                  i + 1 < step && "text-foreground"
+                )}
+              >
+                {i + 1}. {lbl}
+              </span>
+            ))}
+          </div>
         </div>
-        <p className="text-sm text-muted-foreground mb-2">Etapa {step} de 6</p>
-        <p className="text-xs text-muted-foreground italic mb-4">⚕ Todas as sugestões são baseadas em literatura clínica. O médico tem autonomia total para ajustar qualquer valor.</p>
 
         {/* ═══ Step 1: Médico ═══ */}
         {step === 1 && (
@@ -422,11 +623,77 @@ export default function Prescription() {
           </Card>
         )}
 
-        {/* ═══ Step 3: Patologia ═══ */}
+        {/* ═══ Step 3: Finalidade da prescrição ═══ */}
         {step === 3 && (
           <Card>
             <CardHeader>
-              <CardTitle>3. Patologia</CardTitle>
+              <CardTitle>3. Finalidade da prescrição</CardTitle>
+              <CardDescription>
+                Esta escolha define o formato dos documentos gerados.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {PRESCRIPTION_PURPOSES.map((p) => {
+                  const isSelected = purpose === p.id;
+                  const Icon = p.id === "RELATORIO_DETALHADO" ? Stethoscope : ShoppingCart;
+                  return (
+                    <div
+                      key={p.id}
+                      className={`p-5 rounded-lg border-2 cursor-pointer transition-all ${
+                        isSelected ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+                      }`}
+                      onClick={() => setPurpose(p.id)}
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
+                            isSelected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                          }`}>
+                            <Icon className="h-5 w-5" />
+                          </div>
+                          <p className="font-bold text-base">{p.label}</p>
+                        </div>
+                        {isSelected && <Check className="h-5 w-5 text-primary" />}
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-3">{p.description}</p>
+                      <ul className="space-y-1">
+                        {p.consequences.map((c, i) => (
+                          <li key={i} className="text-xs flex items-start gap-2">
+                            <span className="text-primary mt-0.5">•</span>
+                            <span>{c}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {purpose === "RELATORIO_DETALHADO" && (
+                <div className="p-3 rounded-lg border border-primary/30 bg-primary-soft/40 text-sm">
+                  <p className="font-medium text-foreground flex items-center gap-1">
+                    <FileText className="h-4 w-4 text-primary" /> Anamnese expandida nas próximas etapas
+                  </p>
+                  <p className="text-ink-soft text-xs mt-1">
+                    Você preencherá uma anamnese clínica detalhada para gerar o Relatório Médico Detalhado, com história da doença, tratamentos prévios e justificativa clínica do canabidiol. Cada campo já vem com texto sugerido — você pode aceitar e ajustar conforme o caso, ou usar o microfone para ditar a fala do paciente. A receita terá dose máxima estabelecida e validade estendida de 1 ano para garantir continuidade do tratamento.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex justify-between">
+                <Button variant="outline" onClick={() => setStep(2)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
+                <Button onClick={() => setStep(4)} disabled={!purpose}>Próximo <ArrowRight className="h-4 w-4 ml-1" /></Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ═══ Step 4: Patologia ═══ */}
+        {step === 4 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>4. Patologia</CardTitle>
               <CardDescription>Selecione a condição clínica do paciente</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -473,37 +740,38 @@ export default function Prescription() {
               )}
 
               <div className="flex justify-between">
-                <Button variant="outline" onClick={() => setStep(2)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
-                <Button onClick={() => setStep(4)} disabled={!selectedPathology}>Próximo <ArrowRight className="h-4 w-4 ml-1" /></Button>
+                <Button variant="outline" onClick={() => setStep(3)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
+                <Button onClick={() => setStep(5)} disabled={!selectedPathology}>Próximo <ArrowRight className="h-4 w-4 ml-1" /></Button>
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* ═══ Step 4: Produto ═══ */}
-        {step === 4 && (
+        {/* ═══ Step 5: Produto ═══ */}
+        {step === 5 && (
           <Card>
             <CardHeader>
-              <CardTitle>4. Produto</CardTitle>
+              <CardTitle>5. Produto</CardTitle>
               <CardDescription>Selecione o produto a ser prescrito</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               {(() => {
                 const visibleProducts = PRODUCTS.filter(p => isProductAvailableForPathology(p, selectedPathology));
                 const precision = visibleProducts.filter(p => p.productLine === "PRECISION");
-                const line6000 = visibleProducts.filter(p => p.productLine === "LINE_6000");
+                const essential = visibleProducts.filter(p => p.productLine === "ESSENTIAL");
 
                 const renderProductCard = (product: Product, opts: { subdued?: boolean } = {}) => {
                   const isRecommended = selectedPathology?.recommendedProduct === product.name;
                   const isSelected = selectedProduct?.name === product.name;
-                  const isSecondChoice = product.productLine === "LINE_6000" && product.secondChoiceFor === selectedPathology?.recommendedProduct;
-                  const isTypeA = product.type === "A";
+                  const isSecondChoice = product.productLine === "ESSENTIAL"
+                    && !!selectedPathology?.recommendedProduct
+                    && (product.secondChoiceFor ?? []).includes(selectedPathology.recommendedProduct);
                   return (
                     <div
                       key={product.name}
                       className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
                         isSelected
-                          ? (isTypeA ? "border-destructive bg-destructive/5" : "border-primary bg-primary/5")
+                          ? "border-primary bg-primary/5"
                           : opts.subdued
                             ? "border-border/60 hover:border-primary/40"
                             : "border-border hover:border-primary/50"
@@ -513,7 +781,7 @@ export default function Prescription() {
                       <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-bold text-lg">{product.fullLabel.split(" — ")[0]}</p>
-                          <Badge variant={isTypeA ? "destructive" : "outline"}>{product.typeLabel}</Badge>
+                          <Badge variant="outline">{product.typeLabel}</Badge>
                           {isRecommended && <Badge className="bg-primary text-primary-foreground">✓ Indicado para este caso</Badge>}
                           {isSecondChoice && <Badge variant="secondary">Segunda opção</Badge>}
                         </div>
@@ -522,16 +790,6 @@ export default function Prescription() {
                       <p className="text-sm text-muted-foreground mb-2">{product.description}</p>
                       {isSelected && (
                         <div className="mt-3 space-y-3">
-                          {product.requiresTypeAWarning && (
-                            <div className="p-3 rounded border-2 border-destructive bg-destructive/10 text-sm space-y-1">
-                              <p className="font-bold text-destructive flex items-center gap-1">
-                                <AlertTriangle className="h-4 w-4" /> RECEITUÁRIO TIPO A — THC 1,4% (100mg/frasco · 0,09mg/gota)
-                              </p>
-                              <p>Indicado exclusivamente para cuidados paliativos em situação clínica irreversível ou terminal.</p>
-                              <p>Exige <strong>Notificação de Receita A</strong> (talonário especial).</p>
-                              <p>Confirme que o paciente se enquadra nos critérios da <strong>RDC Anvisa 327/2019</strong>.</p>
-                            </div>
-                          )}
                           <div className="p-3 rounded bg-muted text-sm">
                             <p className="font-medium mb-1">Justificativa clínica:</p>
                             <p>{product.clinicalJustification}</p>
@@ -591,18 +849,18 @@ export default function Prescription() {
                       </div>
                     )}
 
-                    {line6000.length > 0 && (
+                    {essential.length > 0 && (
                       <div className="space-y-3 pt-2">
                         <div className="border-t border-border/60 pt-4">
                           <div className="flex items-center gap-2 mb-1">
-                            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Linha 6000mg</h3>
+                            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Linha Essential</h3>
                             <Badge variant="outline">opção alternativa</Badge>
                           </div>
                           <p className="text-xs text-muted-foreground italic mb-3">
                             Composição mais simples. Indicados quando os produtos da Linha Precision não estiverem disponíveis ou como alternativa de entrada ao tratamento.
                           </p>
                         </div>
-                        <div className="space-y-3">{line6000.map(p => renderProductCard(p, { subdued: true }))}</div>
+                        <div className="space-y-3">{essential.map(p => renderProductCard(p, { subdued: true }))}</div>
                       </div>
                     )}
                   </>
@@ -611,29 +869,66 @@ export default function Prescription() {
 
               <p className="text-xs text-muted-foreground italic">⚕ O médico pode escolher qualquer produto — a recomendação é uma sugestão baseada na literatura.</p>
               <div className="flex justify-between">
-                <Button variant="outline" onClick={() => setStep(3)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
-                <Button onClick={() => setStep(5)} disabled={!selectedProduct}>Próximo <ArrowRight className="h-4 w-4 ml-1" /></Button>
+                <Button variant="outline" onClick={() => setStep(4)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
+                <Button
+                  onClick={() => {
+                    if (purpose === "RELATORIO_DETALHADO" && selectedProduct && selectedPathology) {
+                      // Em judicialização, pré-calcula a dose máxima e validade de 1 ano.
+                      // O Step 6 será a Anamnese Expandida (não a Posologia padrão).
+                      const range = getDoseRange(selectedPathology, weight);
+                      const maxMgDay = range.max;
+                      const dropsPerDay = mgDayToDropsDay(maxMgDay, selectedProduct);
+                      const dropsPerDose = Math.max(1, Math.round(dropsPerDay / 2));
+                      setMaintenanceDrops(dropsPerDose);
+                      setInitialDrops(dropsPerDose);
+                      setIncrement(0);
+                      setIntervalDays(0);
+                      const oneYear = new Date();
+                      oneYear.setFullYear(oneYear.getFullYear() + 1);
+                      setReturnDate(oneYear.toISOString().slice(0, 10));
+                    }
+                    setStep(6);
+                  }}
+                  disabled={!selectedProduct}
+                >
+                  Próximo <ArrowRight className="h-4 w-4 ml-1" />
+                </Button>
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* ═══ Step 5: Posologia ═══ */}
-        {step === 5 && selectedProduct && (
+        {/* ═══ Step 6: Posologia (compra direta) | Anamnese Expandida (judicialização) ═══ */}
+        {step === 6 && selectedProduct && purpose === "RELATORIO_DETALHADO" && (
           <Card>
             <CardHeader>
-              <CardTitle>5. Posologia</CardTitle>
+              <CardTitle>6. Anamnese clínica detalhada</CardTitle>
+              <CardDescription>
+                Preencha os campos abaixo para gerar o Relatório Médico Detalhado. Cada campo já vem com texto sugerido — clique nele para editar conforme o caso, ou use o microfone para ditar / transcrever a fala do paciente.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <AnamneseForm
+                answers={anamneseAnswers}
+                onChange={setAnamneseAnswers}
+                customFields={customAnamneseFields}
+                onCustomFieldsChange={setCustomAnamneseFields}
+              />
+              <div className="flex justify-between">
+                <Button variant="outline" onClick={() => setStep(5)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
+                <Button onClick={() => setStep(7)}>Próximo <ArrowRight className="h-4 w-4 ml-1" /></Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {step === 6 && selectedProduct && purpose !== "RELATORIO_DETALHADO" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>6. Posologia</CardTitle>
               <CardDescription>Defina os valores exatos do protocolo de titulação — "start low, go slow"</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {selectedProduct.requiresTypeAWarning && (
-                <div className="p-3 rounded border-2 border-destructive bg-destructive/10 text-sm space-y-1">
-                  <p className="font-bold text-destructive flex items-center gap-1">
-                    <AlertTriangle className="h-4 w-4" /> RECEITUÁRIO TIPO A — THC 1,4% (100mg/frasco · 0,09mg/gota)
-                  </p>
-                  <p>Indicado exclusivamente para cuidados paliativos em situação clínica irreversível ou terminal. Exige <strong>Notificação de Receita A</strong> (talonário especial). Confirme RDC Anvisa 327/2019.</p>
-                </div>
-              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
                   <Label>Dose inicial (gotas/tomada)</Label>
@@ -754,42 +1049,61 @@ export default function Prescription() {
               )}
 
               {/* Bottle calculation */}
-              <div className="p-4 rounded-lg bg-muted space-y-3">
-                <p className="font-semibold">Cálculo de frascos (30 dias)</p>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Semana</TableHead>
-                        <TableHead>Gotas/dose</TableHead>
-                        <TableHead>Dias</TableHead>
-                        <TableHead>Gotas consumidas</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {bottleBreakdown.map((b, i) => (
-                        <TableRow key={i}>
-                          <TableCell>{b.week}</TableCell>
-                          <TableCell>{b.dropsPerDose}</TableCell>
-                          <TableCell>{b.days}</TableCell>
-                          <TableCell>{b.drops}</TableCell>
-                        </TableRow>
-                      ))}
-                      <TableRow className="font-bold">
-                        <TableCell colSpan={3}>Total de gotas em 30 dias</TableCell>
-                        <TableCell>{totalDrops30}</TableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </div>
-                <div className="flex items-center gap-4">
-                  <p className="text-sm">{totalDrops30} gotas ÷ {selectedProduct.dropsPerBottle} gotas/frasco = <strong>{Math.ceil(totalDrops30 / selectedProduct.dropsPerBottle)}</strong> frasco(s)</p>
+              {purpose === "RELATORIO_DETALHADO" ? (
+                <div className="p-4 rounded-lg bg-muted space-y-3">
+                  <p className="font-semibold">Cálculo de frascos (uso contínuo)</p>
+                  <p className="text-sm">
+                    {maintenanceDrops} gotas/dose × 2 doses/dia × 30 dias = <strong>{maintenanceDrops * 2 * 30}</strong> gotas/mês
+                  </p>
+                  <p className="text-sm">
+                    {maintenanceDrops * 2 * 30} gotas ÷ {selectedProduct.dropsPerBottle} gotas/frasco = <strong>{editableBottles}</strong> frasco(s) por mês
+                  </p>
                   <div className="flex items-center gap-2">
-                    <Label>Frascos (editável):</Label>
+                    <Label>Frascos por mês (editável):</Label>
                     <Input type="number" min={1} className="w-20" value={editableBottles} onChange={e => setEditableBottles(Number(e.target.value))} />
                   </div>
+                  <p className="text-xs text-muted-foreground italic">
+                    A receita será emitida com validade de 1 ano. O total a ser custeado pelo Estado/plano será de aproximadamente <strong>{editableBottles * 12} frasco(s)</strong> ao longo do período.
+                  </p>
                 </div>
-              </div>
+              ) : (
+                <div className="p-4 rounded-lg bg-muted space-y-3">
+                  <p className="font-semibold">Cálculo de frascos (30 dias)</p>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Semana</TableHead>
+                          <TableHead>Gotas/dose</TableHead>
+                          <TableHead>Dias</TableHead>
+                          <TableHead>Gotas consumidas</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {bottleBreakdown.map((b, i) => (
+                          <TableRow key={i}>
+                            <TableCell>{b.week}</TableCell>
+                            <TableCell>{b.dropsPerDose}</TableCell>
+                            <TableCell>{b.days}</TableCell>
+                            <TableCell>{b.drops}</TableCell>
+                          </TableRow>
+                        ))}
+                        <TableRow className="font-bold">
+                          <TableCell colSpan={3}>Total de gotas em 30 dias</TableCell>
+                          <TableCell>{totalDrops30}</TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <p className="text-sm">{totalDrops30} gotas ÷ {selectedProduct.dropsPerBottle} gotas/frasco = <strong>{Math.ceil(totalDrops30 / selectedProduct.dropsPerBottle)}</strong> frasco(s)</p>
+                    <div className="flex items-center gap-2">
+                      <Label>Frascos (editável):</Label>
+                      <Input type="number" min={1} className="w-20" value={editableBottles} onChange={e => setEditableBottles(Number(e.target.value))} />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="p-3 rounded bg-muted/50 text-xs text-muted-foreground">
                 <p className="font-medium">⚠ Nota clínica:</p>
@@ -799,27 +1113,29 @@ export default function Prescription() {
               <p className="text-xs text-muted-foreground italic">⚕ Todas as sugestões são baseadas em literatura clínica. O médico tem autonomia total para ajustar qualquer valor.</p>
 
               <div className="flex justify-between">
-                <Button variant="outline" onClick={() => setStep(4)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
-                <Button onClick={() => setStep(6)}>Próximo <ArrowRight className="h-4 w-4 ml-1" /></Button>
+                <Button variant="outline" onClick={() => setStep(5)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
+                <Button onClick={() => setStep(7)}>Próximo <ArrowRight className="h-4 w-4 ml-1" /></Button>
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* ═══ Step 6: Documentos ═══ */}
-        {step === 6 && selectedProduct && selectedPathology && (
+        {/* ═══ Step 7: Documentos ═══ */}
+        {step === 7 && selectedProduct && selectedPathology && (
           <Card>
             <CardHeader>
-              <CardTitle>6. Documentos</CardTitle>
+              <CardTitle>7. Documentos</CardTitle>
               <CardDescription>Revise os dados e gere os PDFs. Todos os campos são editáveis.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {selectedProduct.requiresTypeAWarning && (
-                <div className="p-3 rounded border-2 border-destructive bg-destructive/10 text-sm space-y-1">
-                  <p className="font-bold text-destructive flex items-center gap-1">
-                    <AlertTriangle className="h-4 w-4" /> RECEITUÁRIO TIPO A — THC 1,4% (100mg/frasco · 0,09mg/gota)
+              {purpose === "RELATORIO_DETALHADO" && (
+                <div className="p-3 rounded-lg border border-primary/30 bg-primary-soft/40 text-sm">
+                  <p className="font-semibold text-foreground flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-primary" /> Prescrição com relatório médico detalhado
                   </p>
-                  <p>Indicado exclusivamente para cuidados paliativos em situação clínica irreversível ou terminal. Exige <strong>Notificação de Receita A</strong> (talonário especial). Confirme RDC Anvisa 327/2019.</p>
+                  <p className="text-xs text-ink-soft mt-1">
+                    A receita será emitida com dose máxima estabelecida ({maintenanceDrops} gotas × 2/dia) e validade de 1 ano para garantir continuidade do tratamento. O Guia do Paciente segue o protocolo padrão de titulação progressiva — o paciente faz o ajuste gradual normalmente, o que muda é apenas a validade da receita. O Relatório Médico Detalhado é gerado a partir da anamnese clínica preenchida.
+                  </p>
                 </div>
               )}
               <div className="grid gap-4">
@@ -865,14 +1181,24 @@ export default function Prescription() {
                   <Button onClick={() => handleSaveAndDownload("guia")} disabled={saving} variant="outline">
                     <Download className="h-4 w-4 mr-1" /> {saving ? "Gerando..." : "Guia do Paciente (PDF)"}
                   </Button>
+                  {purpose === "RELATORIO_DETALHADO" && (
+                    <Button onClick={() => handleSaveAndDownload("relatorio")} disabled={saving} variant="outline" className="border-primary/40 hover:border-primary/60 hover:bg-primary-soft/40">
+                      <FileText className="h-4 w-4 mr-1" /> {saving ? "Gerando..." : "Relatório Médico Detalhado (PDF)"}
+                    </Button>
+                  )}
                   <Button onClick={() => handleSaveAndDownload("ambos")} disabled={saving}>
-                    <Download className="h-4 w-4 mr-1" /> {saving ? "Gerando..." : "Gerar Ambos"}
+                    <Download className="h-4 w-4 mr-1" /> {saving ? "Gerando..." : "Gerar Receita + Guia"}
                   </Button>
                 </div>
+                {purpose === "RELATORIO_DETALHADO" && (
+                  <p className="text-xs text-ink-soft italic">
+                    O Relatório Médico Detalhado é gerado a partir da anamnese clínica que você preencheu na etapa anterior. É um documento médico fundamentado, sem termos jurídicos.
+                  </p>
+                )}
               </div>
 
               <div className="flex justify-between">
-                <Button variant="outline" onClick={() => setStep(5)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
+                <Button variant="outline" onClick={() => setStep(6)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
                 <Button onClick={() => navigate(`/pacientes/${patient.id}/historico`)}>
                   Finalizar Prescrição
                 </Button>
@@ -881,6 +1207,6 @@ export default function Prescription() {
           </Card>
         )}
       </div>
-    </div>
+    </AppShell>
   );
 }

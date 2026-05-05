@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
@@ -19,29 +20,31 @@ import ScientificLibrary from "./pages/ScientificLibrary";
 const queryClient = new QueryClient();
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <AuthProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/cadastro" element={<Register />} />
-            <Route path="/admin" element={<AdminPanel />} />
-            <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-            <Route path="/perfil" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-            <Route path="/pacientes/novo" element={<ProtectedRoute><NewPatient /></ProtectedRoute>} />
-            <Route path="/pacientes/:patientId/editar" element={<ProtectedRoute><NewPatient /></ProtectedRoute>} />
-            <Route path="/prescricao/:patientId" element={<ProtectedRoute><Prescription /></ProtectedRoute>} />
-            <Route path="/pacientes/:patientId/historico" element={<ProtectedRoute><PatientHistory /></ProtectedRoute>} />
-            <Route path="/biblioteca" element={<ProtectedRoute><ScientificLibrary /></ProtectedRoute>} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </AuthProvider>
-    </TooltipProvider>
-  </QueryClientProvider>
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <AuthProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/cadastro" element={<Register />} />
+              <Route path="/admin" element={<AdminPanel />} />
+              <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+              <Route path="/perfil" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+              <Route path="/pacientes/novo" element={<ProtectedRoute><NewPatient /></ProtectedRoute>} />
+              <Route path="/pacientes/:patientId/editar" element={<ProtectedRoute><NewPatient /></ProtectedRoute>} />
+              <Route path="/prescricao/:patientId" element={<ProtectedRoute><Prescription /></ProtectedRoute>} />
+              <Route path="/pacientes/:patientId/historico" element={<ProtectedRoute><PatientHistory /></ProtectedRoute>} />
+              <Route path="/biblioteca" element={<ProtectedRoute><ScientificLibrary /></ProtectedRoute>} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </AuthProvider>
+      </TooltipProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;

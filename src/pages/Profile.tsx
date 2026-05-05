@@ -1,17 +1,15 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AppShell } from "@/components/AppShell";
 import { toast } from "sonner";
-import { ArrowLeft } from "lucide-react";
+import { Save, IdCard } from "lucide-react";
 
 export default function Profile() {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     full_name: "",
@@ -19,6 +17,7 @@ export default function Profile() {
     specialty: "",
     phone: "",
     address: "",
+    email: "",
   });
 
   useEffect(() => {
@@ -31,6 +30,7 @@ export default function Profile() {
           specialty: data.specialty || "",
           phone: data.phone || "",
           address: data.address || "",
+          email: (data as { email?: string }).email || "",
         });
       }
     });
@@ -45,47 +45,140 @@ export default function Profile() {
     if (error) {
       toast.error("Erro ao salvar: " + error.message);
     } else {
-      toast.success("Perfil atualizado!");
+      toast.success("Perfil atualizado");
     }
   };
 
   return (
-    <div className="min-h-screen bg-secondary/20 p-4">
-      <div className="mx-auto max-w-2xl">
-        <Button variant="ghost" onClick={() => navigate("/")} className="mb-4">
-          <ArrowLeft className="h-4 w-4 mr-1" /> Voltar
-        </Button>
-        <Card>
-          <CardHeader><CardTitle>Meu Perfil Médico</CardTitle></CardHeader>
-          <CardContent>
-            <form onSubmit={handleSave} className="space-y-4">
-              <div className="space-y-2">
-                <Label>Nome completo</Label>
-                <Input value={form.full_name} onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))} />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>CRM</Label>
-                  <Input value={form.crm} onChange={(e) => setForm((f) => ({ ...f, crm: e.target.value }))} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Especialidade</Label>
-                  <Input value={form.specialty} onChange={(e) => setForm((f) => ({ ...f, specialty: e.target.value }))} />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Telefone</Label>
-                <Input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Endereço</Label>
-                <Input value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} />
-              </div>
-              <Button type="submit" disabled={loading}>{loading ? "Salvando..." : "Salvar"}</Button>
-            </form>
-          </CardContent>
-        </Card>
+    <AppShell
+      pageEyebrow="Identificação profissional"
+      pageTitle="Meu perfil"
+      pageDescription="Estes dados aparecem nas receitas, no Guia do Paciente e no Relatório Médico Detalhado."
+      breadcrumbs={[{ label: "Pacientes", href: "/" }, { label: "Meu perfil" }]}
+    >
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
+        {/* Coluna principal: form */}
+        <form onSubmit={handleSave} className="card-editorial p-6 lg:p-8">
+          <div className="mb-6 flex items-center gap-3 border-b border-border pb-5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary-soft text-primary">
+              <IdCard className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="font-display text-[18px] font-semibold tracking-tight">Dados do médico</h2>
+              <p className="text-[12.5px] text-ink-soft">Atualize sempre que houver mudança no consultório.</p>
+            </div>
+          </div>
+
+          <div className="space-y-5">
+            <Field
+              label="Nome completo"
+              required
+              value={form.full_name}
+              onChange={(v) => setForm((f) => ({ ...f, full_name: v }))}
+              hint="Como aparece no carimbo (ex.: Maria Silva Santos)."
+            />
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field
+                label="CRM"
+                required
+                mono
+                value={form.crm}
+                onChange={(v) => setForm((f) => ({ ...f, crm: v }))}
+                placeholder="000000-UF"
+              />
+              <Field
+                label="Especialidade"
+                required
+                value={form.specialty}
+                onChange={(v) => setForm((f) => ({ ...f, specialty: v }))}
+                placeholder="Neurologia, Reumatologia, Psiquiatria…"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field
+                label="E-mail profissional"
+                value={form.email}
+                onChange={(v) => setForm((f) => ({ ...f, email: v }))}
+                placeholder="seu@consultorio.com.br"
+                type="email"
+              />
+              <Field
+                label="Telefone do consultório"
+                mono
+                value={form.phone}
+                onChange={(v) => setForm((f) => ({ ...f, phone: v }))}
+                placeholder="(00) 00000-0000"
+              />
+            </div>
+
+            <Field
+              label="Endereço profissional"
+              value={form.address}
+              onChange={(v) => setForm((f) => ({ ...f, address: v }))}
+              placeholder="Rua, número, sala, bairro, cidade/UF"
+            />
+          </div>
+
+          <div className="mt-8 flex items-center justify-end gap-2 border-t border-border pt-5">
+            <Button type="submit" disabled={loading} className="h-10 px-5">
+              <Save className="mr-1.5 h-4 w-4" />
+              {loading ? "Salvando…" : "Salvar alterações"}
+            </Button>
+          </div>
+        </form>
+
+        {/* Coluna lateral: nota institucional */}
+        <aside className="space-y-4">
+          <div className="card-editorial p-5">
+            <p className="eyebrow mb-2">Importante</p>
+            <p className="text-[13px] leading-relaxed text-foreground">
+              As informações de CRM e especialidade são impressas literalmente
+              em todos os documentos gerados (receita, guia, relatório). Confira
+              antes de emitir prescrições.
+            </p>
+          </div>
+          <div className="card-editorial p-5">
+            <p className="eyebrow mb-2">Conformidade</p>
+            <ul className="space-y-1.5 text-[12.5px] text-ink-soft">
+              <li>· CFM 2.113/2014 — prescrição de canabidiol</li>
+              <li>· LGPD — proteção de dados clínicos</li>
+              <li>· RDC 660/2022 — importação por pessoa física</li>
+            </ul>
+          </div>
+        </aside>
       </div>
+    </AppShell>
+  );
+}
+
+function Field({
+  label, value, onChange, required, mono, placeholder, hint, type = "text",
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  required?: boolean;
+  mono?: boolean;
+  placeholder?: string;
+  hint?: string;
+  type?: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-[12.5px]">
+        {label} {required && <span className="text-destructive">*</span>}
+      </Label>
+      <Input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        required={required}
+        placeholder={placeholder}
+        className={`h-10 ${mono ? "font-mono" : ""}`}
+      />
+      {hint && <p className="text-[11px] text-ink-soft">{hint}</p>}
     </div>
   );
 }
