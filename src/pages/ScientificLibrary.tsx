@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AppShell } from "@/components/AppShell";
-import { ArrowLeft, ExternalLink, Search, BookOpen, Microscope } from "lucide-react";
+import { ArrowLeft, ExternalLink, Search, BookOpen, Microscope, FileText, Beaker, Users } from "lucide-react";
 import {
   GENERAL_REFERENCES,
   PATHOLOGY_REFERENCES,
@@ -202,31 +203,135 @@ export default function ScientificLibrary() {
 }
 
 function RefBlock({ r }: { r: ScientificReference }) {
+  const [open, setOpen] = useState(false);
+  const hasEmbedded = Boolean(r.abstract || r.conclusion);
   return (
-    <article className="rounded-lg border border-border bg-surface p-4 transition-colors hover:border-border-strong">
-      <header className="flex items-start justify-between gap-3">
-        <p className="text-[12px] font-medium text-ink-soft">{r.authors}</p>
-        <span className="shrink-0 font-mono text-[11px] text-ink-soft tabular">{r.year}</span>
-      </header>
-      <p className={cn(
-        "mt-1.5 font-display text-[15px] font-medium leading-snug tracking-tight",
-      )}>
-        “{r.title}”
-      </p>
-      <p className="mt-1.5 text-[12px] italic text-ink-soft">{r.journal}</p>
-      {r.doseInfo && (
-        <p className="mt-2 rounded border-l-2 border-primary/40 bg-primary-soft/40 px-3 py-1.5 text-[12px] text-foreground">
-          {r.doseInfo}
+    <>
+      <article
+        className={cn(
+          "rounded-lg border border-border bg-surface p-4 transition-colors",
+          hasEmbedded
+            ? "cursor-pointer hover:border-primary/40 hover:bg-primary-soft/20"
+            : "hover:border-border-strong"
+        )}
+        onClick={hasEmbedded ? () => setOpen(true) : undefined}
+        role={hasEmbedded ? "button" : undefined}
+      >
+        <header className="flex items-start justify-between gap-3">
+          <p className="text-[12px] font-medium text-ink-soft">{r.authors}</p>
+          <span className="shrink-0 font-mono text-[11px] text-ink-soft tabular">{r.year}</span>
+        </header>
+        <p className="mt-1.5 font-display text-[15px] font-medium leading-snug tracking-tight">
+          “{r.title}”
         </p>
+        <p className="mt-1.5 text-[12px] italic text-ink-soft">
+          {r.journal}
+          {r.studyType && (
+            <>
+              {" · "}
+              <span className="not-italic font-medium text-foreground">{r.studyType}</span>
+            </>
+          )}
+          {r.sampleSize && <> · {r.sampleSize}</>}
+        </p>
+        {r.doseInfo && (
+          <p className="mt-2 rounded border-l-2 border-primary/40 bg-primary-soft/40 px-3 py-1.5 text-[12px] text-foreground">
+            {r.doseInfo}
+          </p>
+        )}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {hasEmbedded && (
+            <span className="inline-flex h-7 items-center gap-1.5 rounded-md border border-primary/30 bg-primary-soft px-2.5 text-[11.5px] font-medium text-primary">
+              <BookOpen className="h-3 w-3" />
+              Ler resumo
+            </span>
+          )}
+          <a
+            href={pubmedUrlForDoi(r.doi)}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex"
+          >
+            <Button variant="outline" size="sm" className="h-7 px-2.5 font-mono text-[11px]">
+              doi:{r.doi}
+              <ExternalLink className="ml-1.5 h-3 w-3" />
+            </Button>
+          </a>
+        </div>
+      </article>
+
+      {hasEmbedded && (
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
+            <DialogHeader>
+              <p className="eyebrow !mb-1.5">{r.studyType ?? "Estudo científico"}</p>
+              <DialogTitle className="font-display text-[20px] leading-tight tracking-tight">
+                “{r.title}”
+              </DialogTitle>
+              <DialogDescription className="!mt-2 text-[12.5px]">
+                <span className="text-foreground">{r.authors}</span>
+                <br />
+                <span className="italic">{r.journal}</span> · {r.year}
+                {r.sampleSize && <> · {r.sampleSize}</>}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="mt-2 space-y-5">
+              {r.protocolDose && (
+                <div>
+                  <p className="eyebrow mb-1.5 flex items-center gap-1.5">
+                    <Beaker className="h-3 w-3" />
+                    Protocolo / posologia usada
+                  </p>
+                  <p className="rounded-md border border-border bg-muted/40 px-3.5 py-2.5 text-[12.5px] leading-relaxed">
+                    {r.protocolDose}
+                  </p>
+                </div>
+              )}
+
+              {r.abstract && (
+                <div>
+                  <p className="eyebrow mb-1.5 flex items-center gap-1.5">
+                    <FileText className="h-3 w-3" />
+                    Resumo do estudo
+                  </p>
+                  <p className="text-[13px] leading-relaxed text-foreground">
+                    {r.abstract}
+                  </p>
+                </div>
+              )}
+
+              {r.conclusion && (
+                <div>
+                  <p className="eyebrow mb-1.5 flex items-center gap-1.5">
+                    <Users className="h-3 w-3" />
+                    Conclusão clínica
+                  </p>
+                  <p className="rounded-md border-l-4 border-primary bg-primary-soft/50 px-4 py-3 text-[13px] leading-relaxed font-medium text-foreground">
+                    {r.conclusion}
+                  </p>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between border-t border-border pt-4">
+                <span className="font-mono text-[11px] text-ink-soft">
+                  doi:{r.doi}
+                </span>
+                <a
+                  href={pubmedUrlForDoi(r.doi)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-[12px] text-ink-soft hover:border-primary/40 hover:text-primary"
+                >
+                  Ver no PubMed
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
-      <div className="mt-3">
-        <a href={pubmedUrlForDoi(r.doi)} target="_blank" rel="noopener noreferrer" className="inline-flex">
-          <Button variant="outline" size="sm" className="h-7 px-2.5 font-mono text-[11px]">
-            doi:{r.doi}
-            <ExternalLink className="ml-1.5 h-3 w-3" />
-          </Button>
-        </a>
-      </div>
-    </article>
+    </>
   );
 }

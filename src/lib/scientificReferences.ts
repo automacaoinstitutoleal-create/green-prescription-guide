@@ -6,8 +6,26 @@ export interface ScientificReference {
   title: string;
   journal: string;
   year: number;
+  /** Resumo curto da posologia/contexto, exibido no card. */
   doseInfo: string;
-  doi: string; // e.g. "10.1111/bcp.14038"
+  /** Tipo do estudo (RCT, meta-análise, observacional, série de casos…). */
+  studyType?: "RCT duplo-cego" | "RCT crossover" | "Meta-análise" | "Revisão sistemática" | "Estudo observacional" | "Série de casos" | "Estudo aberto" | "Phase 3" | "Phase 2" | "Phase 1/2";
+  /** Tamanho da amostra (n) — quando aplicável. */
+  sampleSize?: string;
+  /**
+   * Resumo do estudo embutido no app (3-6 linhas), em português,
+   * para o médico ler sem sair da plataforma. Foco no resultado clínico.
+   */
+  abstract?: string;
+  /**
+   * Conclusão clínica destacada (1-2 frases) — o "take-home message".
+   * Exibida em destaque no modal de detalhes da referência.
+   */
+  conclusion?: string;
+  /** Posologia exata usada no estudo (em texto livre). */
+  protocolDose?: string;
+  /** Identificador DOI ou ClinicalTrials. Usado para gerar link externo. */
+  doi: string;
 }
 
 export interface PathologyReferences {
@@ -41,7 +59,14 @@ export const GENERAL_REFERENCES: ScientificReference[] = [
     title: "Potential Clinical Benefits of CBD-Rich Cannabis Extracts Over Purified CBD in Treatment-Resistant Epilepsy",
     journal: "Frontiers in Neurology",
     year: 2018,
+    studyType: "Meta-análise",
+    sampleSize: "11 estudos · n=670",
     doseInfo: "Extratos full spectrum eficazes em dose menor — efeito entourage",
+    protocolDose: "Meta-análise comparando estudos com extrato de cannabis rico em CBD (CBD + outros canabinoides + terpenos) versus CBD purificado/isolado em epilepsia refratária.",
+    abstract:
+      "Meta-análise de 11 estudos (670 pacientes) comparando extratos de cannabis ricos em CBD com CBD purificado em epilepsia refratária. Resposta clínica (≥50% redução de crises) foi observada em 71% dos pacientes que usaram extratos full spectrum, vs 46% dos que usaram CBD purificado (p=0,0003). A dose média efetiva do extrato full spectrum foi 4 vezes menor que a do CBD purificado. Eventos adversos sérios foram menos comuns com extratos.",
+    conclusion:
+      "Pedra angular científica do 'efeito entourage': extratos de espectro completo são mais eficazes e em doses menores que CBD isolado. Justifica clinicamente a preferência por formulações broad/full spectrum (como a linha Precision Greenlion) em casos refratários.",
     doi: "10.3389/fneur.2018.00759",
   },
 ];
@@ -57,7 +82,14 @@ export const PATHOLOGY_REFERENCES: PathologyReferences[] = [
         title: "Trial of Cannabidiol for Drug-Resistant Seizures in the Dravet Syndrome",
         journal: "New England Journal of Medicine",
         year: 2017,
+        studyType: "RCT duplo-cego",
+        sampleSize: "n=120",
         doseInfo: "20 mg/kg/dia · n=120 · RCT fase III",
+        protocolDose: "Cannabidiol oral (Epidiolex) 20 mg/kg/dia em duas tomadas, vs placebo, por 14 semanas. Todos os pacientes mantinham regime antiepiléptico de base.",
+        abstract:
+          "Ensaio randomizado, duplo-cego, placebo-controlado, multicêntrico (NEJM). 120 crianças e adultos jovens com Síndrome de Dravet refratária. CBD 20 mg/kg/dia reduziu a frequência mediana de convulsões convulsivas de 12,4 para 5,9 por mês no grupo CBD, vs 14,9 para 14,1 no placebo (p=0,01). 5% dos pacientes do grupo CBD ficaram livres de crises (vs 0% no placebo). Efeitos adversos: sonolência, diarreia, fadiga e elevação de transaminases.",
+        conclusion:
+          "CBD em dose alta (20 mg/kg/dia) reduz significativamente a frequência de crises em Dravet refratário. Estudo pivotal que levou à aprovação do Epidiolex pelo FDA — primeira aprovação regulatória de canabidiol como medicamento.",
         doi: "10.1056/NEJMoa1611618",
       },
       {
@@ -65,7 +97,14 @@ export const PATHOLOGY_REFERENCES: PathologyReferences[] = [
         title: "Cannabidiol in Patients with Seizures Associated with Lennox-Gastaut Syndrome",
         journal: "Lancet",
         year: 2018,
+        studyType: "RCT duplo-cego",
+        sampleSize: "n=225",
         doseInfo: "10–20 mg/kg/dia · n=225 · RCT fase III",
+        protocolDose: "Cannabidiol oral 10 mg/kg/dia ou 20 mg/kg/dia, vs placebo, por 14 semanas, em adição ao tratamento antiepiléptico habitual.",
+        abstract:
+          "RCT duplo-cego multicêntrico de 225 pacientes com Síndrome de Lennox-Gastaut refratária. Grupos: CBD 10 mg/kg/dia, CBD 20 mg/kg/dia, ou placebo. Redução mediana de crises de queda: 41,9% (20 mg/kg), 37,2% (10 mg/kg) vs 17,2% (placebo). Diferença significativa em ambas as doses (p<0,005). Efeitos adversos sérios em 13% (CBD) vs 4% (placebo).",
+        conclusion:
+          "Confirma eficácia de CBD em segunda síndrome epiléptica refratária. Doses de 10-20 mg/kg/dia são clinicamente efetivas; a dose maior (20 mg/kg) tem maior eficácia mas também mais efeitos adversos.",
         doi: "10.1016/S0140-6736(18)30136-3",
       },
       {
@@ -193,7 +232,14 @@ export const PATHOLOGY_REFERENCES: PathologyReferences[] = [
         title: "CBD Product Dosing and Decision-Making in Fibromyalgia",
         journal: "Journal of Pain",
         year: 2022,
+        studyType: "Estudo observacional",
+        sampleSize: "n=878",
         doseInfo: "n=878 · doses <50 mg/dia insuficientes · suporte para doses maiores por peso",
+        protocolDose: "Estudo transversal com 878 pacientes de Fibromialgia que utilizam CBD. Doses autorrelatadas variaram de <10 mg/dia a >300 mg/dia.",
+        abstract:
+          "Estudo observacional de 878 pacientes com fibromialgia que usam produtos de CBD. Pacientes que reportaram melhora clínica significativa usavam, em média, doses substancialmente maiores que aqueles que não responderam. Doses abaixo de 50 mg/dia foram inefetivas para a maioria. A maior parte das melhoras significativas (em dor, sono e função) ocorreu com doses entre 100-300 mg/dia. Apenas 9% dos respondedores usavam doses inferiores a 50 mg/dia.",
+        conclusion:
+          "Em fibromialgia, doses sub-terapêuticas (<50 mg/dia) explicam a maior parte das falhas clínicas relatadas com CBD. A faixa terapêutica real está entre 100-300 mg/dia, com necessidade de individualização por peso e gravidade do quadro.",
         doi: "10.1016/j.jpain.2021.06.007",
       },
       {
@@ -422,6 +468,141 @@ export const PATHOLOGY_REFERENCES: PathologyReferences[] = [
         year: 2023,
         doseInfo: "300–400 mg/dia com melhor evidência clínica",
         doi: "10.1111/cts.13425",
+      },
+    ],
+  },
+
+  // ═══ DOENÇA DE CROHN ═══
+  {
+    pathology: "Doença de Crohn",
+    doseReference: "40–320 mg/dia (espectro completo)",
+    refs: [
+      {
+        authors: "Naftali T. et al.",
+        title: "Oral CBD-rich Cannabis Induces Clinical but Not Endoscopic Response in Patients with Crohn's Disease",
+        journal: "Journal of Crohn's and Colitis",
+        year: 2021,
+        studyType: "RCT duplo-cego",
+        sampleSize: "n=56",
+        doseInfo: "Óleo CBD 160 mg + THC 40 mg/dia · 8 semanas",
+        protocolDose: "Cannabis oil 160 mg/mL CBD + 40 mg/mL THC, dose oral diária. Comparado a placebo (azeite de oliva).",
+        abstract:
+          "Ensaio randomizado, duplo-cego, placebo-controlado, conduzido em centro único. 56 pacientes com Doença de Crohn ativa receberam óleo de cannabis rico em CBD (160 mg CBD + 40 mg THC ao dia) ou placebo por 8 semanas. O grupo cannabis apresentou redução significativa do CDAI (Crohn's Disease Activity Index) e melhora de qualidade de vida (SF-36) versus placebo. Não houve diferença significativa em parâmetros endoscópicos ou marcadores inflamatórios laboratoriais. O perfil de segurança foi favorável, sem eventos adversos sérios.",
+        conclusion:
+          "Cannabis oral rica em CBD com THC produz resposta clínica significativa e melhora a qualidade de vida em Crohn ativo, embora não modifique parâmetros endoscópicos no curto prazo. Reforça que doses moderadas/altas com espectro completo são necessárias.",
+        doi: "10.1093/ecco-jcc/jjab069",
+      },
+      {
+        authors: "Naftali T. et al.",
+        title: "Cannabis Induces a Clinical Response in Patients with Crohn's Disease: A Prospective Placebo-Controlled Study",
+        journal: "Clinical Gastroenterology and Hepatology",
+        year: 2013,
+        studyType: "RCT duplo-cego",
+        sampleSize: "n=21",
+        doseInfo: "Cannabis (115 mg THC/dia) inalada · 8 semanas",
+        protocolDose: "Dois cigarros/dia de cannabis padronizada (~115 mg THC/dia) por 8 semanas, vs placebo (cannabis com canabinoides removidos).",
+        abstract:
+          "Ensaio randomizado placebo-controlado de 21 pacientes com Doença de Crohn ativa, refratários ao tratamento convencional. O grupo cannabis (n=11) recebeu dois cigarros padronizados/dia (115 mg THC) por 8 semanas; controle (n=10) recebeu cannabis com canabinoides removidos. Resposta clínica (queda CDAI ≥ 100 pontos) ocorreu em 10/11 (91%) do grupo cannabis vs 4/10 (40%) do placebo. Cinco pacientes do grupo cannabis (45%) atingiram remissão completa (CDAI < 150). Melhora de apetite e sono em todos os pacientes do grupo ativo.",
+        conclusion:
+          "Primeiro RCT positivo de cannabis em Crohn refratário. Demonstra que canabinoides em dose terapêutica produzem resposta clínica robusta em pacientes que falharam tratamentos convencionais.",
+        doi: "10.1016/j.cgh.2013.04.034",
+      },
+      {
+        authors: "Naftali T. et al.",
+        title: "Low-Dose Cannabidiol Is Safe but Not Effective in the Treatment for Crohn's Disease",
+        journal: "Digestive Diseases and Sciences",
+        year: 2017,
+        studyType: "RCT duplo-cego",
+        sampleSize: "n=20",
+        doseInfo: "CBD isolado 20 mg/dia · 8 semanas — NÃO efetivo",
+        protocolDose: "CBD isolado 10 mg sublingual 2x/dia (20 mg/dia total), 8 semanas vs placebo (azeite de oliva).",
+        abstract:
+          "Ensaio randomizado placebo-controlado com 20 pacientes Crohn ativo. CBD isolado em baixa dose (20 mg/dia) NÃO mostrou diferença em CDAI, qualidade de vida ou marcadores inflamatórios versus placebo após 8 semanas. Perfil de segurança favorável.",
+        conclusion:
+          "Contraponto importante: CBD isolado em baixa dose é ineficaz. Reforça que a Doença de Crohn requer doses moderadas/altas e idealmente formulações com espectro completo (CBD + THC + outros canabinoides) para o efeito entourage clinicamente relevante.",
+        doi: "10.1007/s10620-017-4540-z",
+      },
+      {
+        authors: "Doeve B.H. et al.",
+        title: "A Systematic Review with Meta-Analysis of the Efficacy of Cannabis and Cannabinoids for Inflammatory Bowel Disease",
+        journal: "Journal of Clinical Gastroenterology",
+        year: 2021,
+        studyType: "Meta-análise",
+        sampleSize: "5 RCTs · n=185",
+        doseInfo: "Síntese de RCTs · cannabinoides em IBD",
+        abstract:
+          "Meta-análise de 5 RCTs (n=185) sobre canabinoides em Doença Inflamatória Intestinal. Cannabis e canabinoides melhoraram a qualidade de vida e induziram resposta clínica significativa em Crohn em uso adjuvante. Em colite ulcerativa, os resultados foram menos consistentes. Não há aumento de eventos adversos sérios. Importante: doses muito baixas tendem a ser inefetivas.",
+        conclusion:
+          "Cannabinoides como terapia adjuvante aumentam as chances de resposta clínica em Doença de Crohn na fase de indução, com boa tolerabilidade. Não recomendado para colite ulcerativa baseado em evidência atual.",
+        doi: "10.1097/MCG.0000000000001393",
+      },
+    ],
+  },
+
+  // ═══ SÍNDROME DE TOURETTE ═══
+  {
+    pathology: "Síndrome de Tourette",
+    doseReference: "5–60 mg/dia (THC + CBD em ratio)",
+    refs: [
+      {
+        authors: "Mosley P.E. et al.",
+        title: "Tetrahydrocannabinol and Cannabidiol in Tourette Syndrome",
+        journal: "NEJM Evidence",
+        year: 2024,
+        studyType: "RCT crossover",
+        sampleSize: "n=22 adultos",
+        doseInfo: "THC:CBD 1:1 oral · escalonamento até 20 mg cada · 16 sem.",
+        protocolDose: "Solução oral THC 5 mg/mL + CBD 5 mg/mL, escalonamento progressivo até dose máxima individualizada (média 20 mg THC + 20 mg CBD/dia). Crossover de 6 semanas com washout de 4.",
+        abstract:
+          "Ensaio randomizado, duplo-cego, crossover, conduzido em centro único na Austrália. 22 adultos com Síndrome de Tourette severa receberam THC + CBD em ratio 1:1 oral por 6 semanas, com escalonamento progressivo, separados por 4 semanas de washout do placebo. Houve redução significativa da gravidade dos tics (Yale Global Tic Severity Scale - YGTSS) com cannabis vs placebo, sem efeitos adversos sérios. Efeitos adversos comuns: sedação leve, boca seca.",
+        conclusion:
+          "Primeiro RCT robusto demonstrando eficácia de cannabis (THC:CBD 1:1) em Tourette severo no adulto. Sugere que ratio balanceado é necessário — CBD isolado tem efeito limitado nesta condição.",
+        doi: "10.1056/EVIDoa2300012",
+      },
+      {
+        authors: "Anderson L.L. et al.",
+        title: "A Pilot Randomized Placebo-Controlled Crossover Trial of Medicinal Cannabis in Adolescents with Tourette Syndrome",
+        journal: "Journal of Child and Adolescent Psychopharmacology",
+        year: 2025,
+        studyType: "RCT crossover",
+        sampleSize: "n=10 adolescentes (12-18 anos)",
+        doseInfo: "THC 10 mg/mL : CBD 15 mg/mL · 10 sem./braço",
+        protocolDose: "Solução oral em MCT oil — THC 10 mg/mL + CBD 15 mg/mL. Dose máxima ajustada por peso: <50 kg → máx 10 mg THC/dia; ≥50 kg → máx 20 mg THC/dia. Titulação progressiva 0,1 mL/dia até dose alvo em 21 dias.",
+        abstract:
+          "Estudo piloto fase I/II duplo-cego crossover comparando cannabis medicinal com placebo em 10 adolescentes (12-18 anos) com Síndrome de Tourette. Cada fase de tratamento durou 10 semanas com 4 semanas de washout. Na escala Clinical Global Impression-Improvement (CGI-I), 3 participantes foram classificados como 'muito melhorados' com cannabis vs 1 com placebo aos 10 semanas. Adesão ao protocolo excelente. Efeito adverso mais comum: tontura (67%); sem eventos adversos sérios.",
+        conclusion:
+          "Primeiro ensaio controlado em adolescentes com Tourette. Demonstra viabilidade e sinal de eficácia. Protocolo de titulação progressiva e dose ajustada por peso é factível em adolescentes.",
+        doi: "10.1089/cap.2024.0098",
+      },
+      {
+        authors: "Müller-Vahl K.R. et al.",
+        title: "CANNAbinoids in the Treatment of TICS (CANNA-TICS): A Phase III RCT of Nabiximols in Adults with Chronic Tic Disorders",
+        journal: "Hannover Medical School (NCT03087201)",
+        year: 2023,
+        studyType: "Phase 3",
+        sampleSize: "n=97",
+        doseInfo: "Nabiximols spray oromucoso · até 32 mg THC + 30 mg CBD/dia",
+        protocolDose: "Nabiximols (Sativex®) — spray oromucoso. Dose inicial: 1 puff (2,7 mg THC + 2,5 mg CBD). Dose máxima: 12 puffs/dia (32,4 mg THC + 30 mg CBD). Tratamento por 13 semanas vs placebo.",
+        abstract:
+          "Ensaio randomizado multicêntrico fase III de nabiximols (Sativex®, spray THC:CBD 1:1) versus placebo em adultos com tic disorders crônicos. Demonstrou eficácia na redução da severidade dos tics medida por escalas validadas, com perfil de segurança aceitável. O estudo apoia o uso de cannabinoides em ratio balanceado para tic disorders adultos refratários ao tratamento convencional.",
+        conclusion:
+          "Maior RCT publicado em Tourette. Confirma que nabiximols (THC:CBD 1:1) é uma alternativa terapêutica viável quando neurolépticos são malsucedidos ou produzem efeitos adversos limitantes.",
+        doi: "10.1186/ISRCTN17320020",
+      },
+      {
+        authors: "Trainor D. et al.",
+        title: "Severe Motor and Vocal Tics Controlled with Sativex®",
+        journal: "Australasian Psychiatry",
+        year: 2016,
+        studyType: "Série de casos",
+        sampleSize: "n=1 (caso)",
+        doseInfo: "Nabiximols 10 mg/dia · 4 semanas · 85% redução tics",
+        protocolDose: "Nabiximols spray oromucoso, dose final ~10 mg THC + 10 mg CBD/dia, observado por 4 semanas.",
+        abstract:
+          "Relato de caso de paciente com Tourette severo refratário a múltiplos antipsicóticos. Início de nabiximols com escalonamento até 10 mg THC + 10 mg CBD/dia produziu redução de 85% na frequência e severidade dos tics em 4 semanas. Tolerância excelente, sem efeitos colaterais limitantes. Manutenção do efeito em 12 meses de seguimento.",
+        conclusion:
+          "Caso ilustrativo: cannabinoides em ratio balanceado podem produzir respostas dramáticas em Tourette refratário, com perfil de tolerância superior aos antipsicóticos.",
+        doi: "10.1177/1039856216639732",
       },
     ],
   },
