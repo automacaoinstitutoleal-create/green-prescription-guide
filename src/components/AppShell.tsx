@@ -205,7 +205,7 @@ export function AppShell({
           </button>
           <BrandMark size={24} />
           <span className="font-display text-[15px] font-semibold tracking-tight">
-            Greenlion <span className="font-normal italic text-primary">Precision</span>
+            <span className="font-normal italic text-primary">Precision</span>
           </span>
         </header>
 
