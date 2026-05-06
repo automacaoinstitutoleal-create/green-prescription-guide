@@ -77,7 +77,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 fontWeight: 600,
               }}
             >
-              Greenlion Precision · Erro inesperado
+              Precision · Erro inesperado
             </p>
             <h1
               style={{

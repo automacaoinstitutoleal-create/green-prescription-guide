@@ -51,7 +51,7 @@ export default function Login() {
           <BrandMark size={36} variant="outline" className="text-primary-foreground" />
           <div className="flex flex-col leading-none">
             <span className="font-display text-[22px] font-semibold tracking-tight">
-              Greenlion <span className="font-normal italic">Precision</span>
+              <span className="font-normal italic">Precision</span>
             </span>
             <span className="mt-1.5 text-[10px] uppercase tracking-[0.22em] text-primary-foreground/70">
               Plataforma médica
@@ -103,7 +103,7 @@ export default function Login() {
           <div className="flex items-center gap-2">
             <BrandMark size={26} className="text-primary" />
             <span className="font-display text-[17px] font-semibold tracking-tight">
-              Greenlion <span className="font-normal italic text-primary">Precision</span>
+              <span className="font-normal italic text-primary">Precision</span>
             </span>
           </div>
         </header>

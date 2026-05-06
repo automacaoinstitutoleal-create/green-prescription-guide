@@ -16,7 +16,7 @@ const NotFound = () => {
         <Link to="/" className="flex items-center gap-2.5">
           <BrandMark size={26} className="text-primary" />
           <span className="font-display text-[17px] font-semibold tracking-tight">
-            Greenlion <span className="font-normal italic text-primary">Precision</span>
+            <span className="font-normal italic text-primary">Precision</span>
           </span>
         </Link>
       </header>

@@ -65,7 +65,7 @@ export function BrandLockup({
       <BrandMark size={size} variant={variant} />
       <div className="flex flex-col leading-none">
         <span className="font-display text-[17px] font-semibold tracking-tight text-foreground">
-          Greenlion <span className="font-normal italic text-primary">Precision</span>
+          <span className="font-normal italic text-primary">Precision</span>
         </span>
         {showTagline && (
           <span className="mt-1 text-[10px] uppercase tracking-[0.18em] text-ink-soft">
