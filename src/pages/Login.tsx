@@ -72,9 +72,8 @@ export default function Login() {
             e identidade institucional.
           </h2>
           <p className="mt-6 max-w-[420px] text-[15px] leading-relaxed text-primary-foreground/85">
-            Calcule a titulação, gere receita e guia do paciente, instrua a
-            judicialização e mantenha o histórico clínico completo. Tudo em um
-            fluxo desenhado por médicos.
+            Calcule a titulação, gere receita e guia do paciente e mantenha o
+            histórico clínico completo. Tudo em um fluxo desenhado por médicos.
           </p>
         </div>
 
