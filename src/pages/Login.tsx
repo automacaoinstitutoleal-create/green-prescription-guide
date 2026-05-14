@@ -13,6 +13,24 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resetting, setResetting] = useState(false);
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      toast.error("Digite seu e-mail acima para receber o link de redefinição.");
+      return;
+    }
+    setResetting(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setResetting(false);
+    if (error) {
+      toast.error("Não foi possível enviar: " + error.message);
+    } else {
+      toast.success("Enviamos um link de redefinição para o seu e-mail.");
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -136,8 +154,13 @@ export default function Login() {
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password" className="text-[12.5px]">Senha</Label>
-                  <button type="button" className="text-[11.5px] text-ink-soft hover:text-primary">
-                    Esqueci minha senha
+                  <button
+                    type="button"
+                    onClick={handleForgotPassword}
+                    disabled={resetting}
+                    className="text-[11.5px] text-ink-soft hover:text-primary disabled:opacity-60"
+                  >
+                    {resetting ? "Enviando..." : "Esqueci minha senha"}
                   </button>
                 </div>
                 <Input

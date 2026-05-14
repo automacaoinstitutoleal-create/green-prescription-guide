@@ -8,6 +8,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import NewPatient from "./pages/NewPatient";
 import Prescription from "./pages/Prescription";
@@ -30,6 +31,7 @@ const App = () => (
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/cadastro" element={<Register />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/admin" element={<AdminPanel />} />
               <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
               <Route path="/perfil" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
