@@ -154,8 +154,13 @@ export default function Login() {
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password" className="text-[12.5px]">Senha</Label>
-                  <button type="button" className="text-[11.5px] text-ink-soft hover:text-primary">
-                    Esqueci minha senha
+                  <button
+                    type="button"
+                    onClick={handleForgotPassword}
+                    disabled={resetting}
+                    className="text-[11.5px] text-ink-soft hover:text-primary disabled:opacity-60"
+                  >
+                    {resetting ? "Enviando..." : "Esqueci minha senha"}
                   </button>
                 </div>
                 <Input
