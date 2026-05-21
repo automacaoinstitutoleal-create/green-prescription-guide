@@ -214,7 +214,7 @@ export const PRODUCTS: Product[] = [
       { name: "CBD", pct: 96.3, mg30ml: 6846, mgMl: +(6846 / 30).toFixed(1), mgDrop: +(6846 / 900).toFixed(3), effect: "Anti-inflamatório, analgésico, ansiolítico" },
       { name: "CBC", pct: 1.9, mg30ml: 133, mgMl: +(133 / 30).toFixed(1), mgDrop: +(133 / 900).toFixed(3), effect: "Anti-inflamatório, analgésico" },
       { name: "CBDV", pct: 0.4, mg30ml: 29, mgMl: +(29 / 30).toFixed(2), mgDrop: +(29 / 900).toFixed(3), effect: "Antiemético, anticonvulsivante" },
-      { name: "THC", pct: 0.3, mg30ml: 21, mgMl: 0.7, mgDrop: 0.018, effect: "Analgésico, sinergia de espectro completo (≤ 0,3%)" },
+      { name: "THC", pct: 0.3, mg30ml: 21, mgMl: 0.7, mgDrop: 0.023, effect: "Analgésico, sinergia de espectro completo (≤ 0,3%)" },
     ],
     productLine: "ESSENTIAL",
     secondChoiceFor: ["BALANCE", "RELIEF"],
