@@ -132,7 +132,7 @@ export default function PatientHistory() {
                 <DataRow label="CPF" value={patient?.cpf} mono />
                 {patient?.rg && <DataRow label="RG" value={patient.rg} mono />}
                 {patient?.birth_date && (
-                  <DataRow label="Nascimento" value={new Date(patient.birth_date).toLocaleDateString("pt-BR")} mono />
+                  <DataRow label="Nascimento" value={formatDateBR(patient.birth_date)} mono />
                 )}
                 {patient?.weight && <DataRow label="Peso" value={`${patient.weight} kg`} mono />}
                 {patient?.address && <DataRow label="Endereço" value={patient.address} />}
