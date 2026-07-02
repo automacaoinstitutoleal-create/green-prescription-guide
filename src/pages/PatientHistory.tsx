@@ -7,7 +7,7 @@ import { AppShell } from "@/components/AppShell";
 import { Download, FileText, BookOpen, Calendar, Activity, Scale } from "lucide-react";
 import { generatePrescriptionPDF, generatePatientGuidePDF } from "@/lib/pdfGenerator";
 import { PRODUCTS } from "@/lib/prescriptionData";
-import { cn } from "@/lib/utils";
+import { cn, formatDateBR } from "@/lib/utils";
 
 interface PrescriptionRow {
   id: string;
