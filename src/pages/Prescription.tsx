@@ -18,6 +18,7 @@ import {
   isProductAvailableForPathology,
   type PathologyInfo, type Product, type TitulationStep, type TitulationConfig,
 } from "@/lib/prescriptionData";
+import { parseLocalDate, formatDateBR } from "@/lib/utils";
 import { PRESCRIPTION_PURPOSES, type PrescriptionPurpose } from "@/lib/prescriptionPurpose";
 import { type AnamneseAnswers, type CustomAnamneseField, emptyAnamneseAnswers, prefillAnamneseDefaults, type AnamneseContext } from "@/lib/anamneseSchema";
 import { generatePrescriptionPDF, generatePatientGuidePDF, generateLegalReportPDF } from "@/lib/pdfGenerator";
