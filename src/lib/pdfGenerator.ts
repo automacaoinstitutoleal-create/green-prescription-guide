@@ -16,6 +16,7 @@ import {
   type DoctorInfo as ThemeDoctorInfo,
   type PatientInfo as ThemePatientInfo,
 } from "./pdfTheme";
+import { formatDateBR } from "./utils";
 
 // Re-export tipos para compatibilidade (mantém imports externos funcionando)
 type DoctorInfo = ThemeDoctorInfo;
@@ -182,7 +183,7 @@ export function generatePrescriptionPDF({ doctor, patient, prescriptionData: pd 
   ].filter(Boolean).join("  ·  ");
   y = writeParagraph(doc, y, idLine, { gap: 1 });
   if (patient.birth_date) {
-    const dob = new Date(patient.birth_date).toLocaleDateString("pt-BR");
+    const dob = formatDateBR(patient.birth_date);
     y = writeParagraph(doc, y, `Data de nascimento: ${dob}`, { gap: 1 });
   }
   if (patient.weight) {
@@ -664,7 +665,7 @@ export function generateLegalReportPDF({
   const idLine = [`CPF: ${patient.cpf}`, patient.rg ? `RG: ${patient.rg}` : null].filter(Boolean).join("  ·  ");
   y = writeParagraph(doc, y, idLine, { gap: 1 });
   if (patient.birth_date) {
-    const dob = new Date(patient.birth_date).toLocaleDateString("pt-BR");
+    const dob = formatDateBR(patient.birth_date);
     const ageStr = patientAge != null ? ` (${patientAge} anos)` : "";
     y = writeKeyValue(doc, y, "Data de nascimento", `${dob}${ageStr}`, { gap: 1 });
   }

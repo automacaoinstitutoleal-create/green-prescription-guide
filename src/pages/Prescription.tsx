@@ -18,6 +18,7 @@ import {
   isProductAvailableForPathology,
   type PathologyInfo, type Product, type TitulationStep, type TitulationConfig,
 } from "@/lib/prescriptionData";
+import { parseLocalDate, formatDateBR } from "@/lib/utils";
 import { PRESCRIPTION_PURPOSES, type PrescriptionPurpose } from "@/lib/prescriptionPurpose";
 import { type AnamneseAnswers, type CustomAnamneseField, emptyAnamneseAnswers, prefillAnamneseDefaults, type AnamneseContext } from "@/lib/anamneseSchema";
 import { generatePrescriptionPDF, generatePatientGuidePDF, generateLegalReportPDF } from "@/lib/pdfGenerator";
@@ -244,7 +245,7 @@ export default function Prescription() {
         patientName: patient.full_name,
         patientAge: patient.birth_date
           ? Math.floor(
-              (Date.now() - new Date(patient.birth_date).getTime()) /
+              (Date.now() - (parseLocalDate(patient.birth_date)?.getTime() ?? Date.now())) /
                 (365.25 * 24 * 60 * 60 * 1000)
             )
           : null,
@@ -326,11 +327,13 @@ export default function Prescription() {
         // Calcula idade do paciente
         let patientAge: number | null = null;
         if (patient.birth_date) {
-          const dob = new Date(patient.birth_date);
-          const today = new Date();
-          patientAge = today.getFullYear() - dob.getFullYear();
-          const m = today.getMonth() - dob.getMonth();
-          if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) patientAge--;
+          const dob = parseLocalDate(patient.birth_date);
+          if (dob) {
+            const today = new Date();
+            patientAge = today.getFullYear() - dob.getFullYear();
+            const m = today.getMonth() - dob.getMonth();
+            if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) patientAge--;
+          }
         }
         // Auto-preenche apenas o resumo da posologia (campo autofill).
         // Os demais campos vêm pré-preenchidos pelo prefillAnamneseDefaults
@@ -555,7 +558,7 @@ export default function Prescription() {
                     {patient.birth_date && (
                       <div className="p-3 rounded-lg bg-muted">
                         <p className="text-xs text-muted-foreground">Data de nascimento</p>
-                        <p className="font-medium">{new Date(patient.birth_date).toLocaleDateString("pt-BR")}</p>
+                        <p className="font-medium">{formatDateBR(patient.birth_date)}</p>
                       </div>
                     )}
                     <div className="p-3 rounded-lg bg-primary/10">

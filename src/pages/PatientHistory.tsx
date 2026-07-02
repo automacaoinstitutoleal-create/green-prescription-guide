@@ -7,7 +7,7 @@ import { AppShell } from "@/components/AppShell";
 import { Download, FileText, BookOpen, Calendar, Activity, Scale } from "lucide-react";
 import { generatePrescriptionPDF, generatePatientGuidePDF } from "@/lib/pdfGenerator";
 import { PRODUCTS } from "@/lib/prescriptionData";
-import { cn } from "@/lib/utils";
+import { cn, formatDateBR } from "@/lib/utils";
 
 interface PrescriptionRow {
   id: string;
@@ -33,11 +33,16 @@ interface Patient {
 
 const ageFromBirth = (birth: string | null) => {
   if (!birth) return null;
-  const b = new Date(birth);
+  // Parse as local time to avoid UTC-shift moving date to previous day.
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(birth);
+  const b = m
+    ? new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10))
+    : new Date(birth);
+  if (isNaN(b.getTime())) return null;
   const now = new Date();
   let age = now.getFullYear() - b.getFullYear();
-  const m = now.getMonth() - b.getMonth();
-  if (m < 0 || (m === 0 && now.getDate() < b.getDate())) age--;
+  const mo = now.getMonth() - b.getMonth();
+  if (mo < 0 || (mo === 0 && now.getDate() < b.getDate())) age--;
   return age;
 };
 
@@ -127,7 +132,7 @@ export default function PatientHistory() {
                 <DataRow label="CPF" value={patient?.cpf} mono />
                 {patient?.rg && <DataRow label="RG" value={patient.rg} mono />}
                 {patient?.birth_date && (
-                  <DataRow label="Nascimento" value={new Date(patient.birth_date).toLocaleDateString("pt-BR")} mono />
+                  <DataRow label="Nascimento" value={formatDateBR(patient.birth_date)} mono />
                 )}
                 {patient?.weight && <DataRow label="Peso" value={`${patient.weight} kg`} mono />}
                 {patient?.address && <DataRow label="Endereço" value={patient.address} />}
