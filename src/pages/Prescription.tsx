@@ -245,7 +245,7 @@ export default function Prescription() {
         patientName: patient.full_name,
         patientAge: patient.birth_date
           ? Math.floor(
-              (Date.now() - new Date(patient.birth_date).getTime()) /
+              (Date.now() - (parseLocalDate(patient.birth_date)?.getTime() ?? Date.now())) /
                 (365.25 * 24 * 60 * 60 * 1000)
             )
           : null,
