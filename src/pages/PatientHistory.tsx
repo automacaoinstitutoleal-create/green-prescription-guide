@@ -33,11 +33,16 @@ interface Patient {
 
 const ageFromBirth = (birth: string | null) => {
   if (!birth) return null;
-  const b = new Date(birth);
+  // Parse as local time to avoid UTC-shift moving date to previous day.
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(birth);
+  const b = m
+    ? new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10))
+    : new Date(birth);
+  if (isNaN(b.getTime())) return null;
   const now = new Date();
   let age = now.getFullYear() - b.getFullYear();
-  const m = now.getMonth() - b.getMonth();
-  if (m < 0 || (m === 0 && now.getDate() < b.getDate())) age--;
+  const mo = now.getMonth() - b.getMonth();
+  if (mo < 0 || (mo === 0 && now.getDate() < b.getDate())) age--;
   return age;
 };
 
