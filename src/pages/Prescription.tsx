@@ -327,11 +327,13 @@ export default function Prescription() {
         // Calcula idade do paciente
         let patientAge: number | null = null;
         if (patient.birth_date) {
-          const dob = new Date(patient.birth_date);
-          const today = new Date();
-          patientAge = today.getFullYear() - dob.getFullYear();
-          const m = today.getMonth() - dob.getMonth();
-          if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) patientAge--;
+          const dob = parseLocalDate(patient.birth_date);
+          if (dob) {
+            const today = new Date();
+            patientAge = today.getFullYear() - dob.getFullYear();
+            const m = today.getMonth() - dob.getMonth();
+            if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) patientAge--;
+          }
         }
         // Auto-preenche apenas o resumo da posologia (campo autofill).
         // Os demais campos vêm pré-preenchidos pelo prefillAnamneseDefaults
