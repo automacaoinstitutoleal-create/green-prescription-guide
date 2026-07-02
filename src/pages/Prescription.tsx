@@ -558,7 +558,7 @@ export default function Prescription() {
                     {patient.birth_date && (
                       <div className="p-3 rounded-lg bg-muted">
                         <p className="text-xs text-muted-foreground">Data de nascimento</p>
-                        <p className="font-medium">{new Date(patient.birth_date).toLocaleDateString("pt-BR")}</p>
+                        <p className="font-medium">{formatDateBR(patient.birth_date)}</p>
                       </div>
                     )}
                     <div className="p-3 rounded-lg bg-primary/10">
