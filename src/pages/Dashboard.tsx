@@ -52,6 +52,12 @@ const isWithinDays = (iso: string | null | undefined, days: number) => {
 
 const formatBR = (iso: string | null | undefined) => {
   if (!iso) return "—";
+  // Date-only string (YYYY-MM-DD): format without timezone shift.
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (m) {
+    const months = ["jan.", "fev.", "mar.", "abr.", "mai.", "jun.", "jul.", "ago.", "set.", "out.", "nov.", "dez."];
+    return `${m[3]} de ${months[parseInt(m[2], 10) - 1]} de ${m[1]}`;
+  }
   return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
 };
 
