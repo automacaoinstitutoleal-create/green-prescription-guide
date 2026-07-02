@@ -16,6 +16,7 @@ import {
   type DoctorInfo as ThemeDoctorInfo,
   type PatientInfo as ThemePatientInfo,
 } from "./pdfTheme";
+import { formatDateBR } from "./utils";
 
 // Re-export tipos para compatibilidade (mantém imports externos funcionando)
 type DoctorInfo = ThemeDoctorInfo;
