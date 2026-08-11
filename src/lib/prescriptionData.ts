@@ -388,3 +388,83 @@ export function calcBottlesFromSchedule(
     bottles: Math.ceil(totalDrops / product.dropsPerBottle),
   };
 }
+
+// ── Múltiplas patologias (comorbidades) ──
+
+/** Produtos livres de THC. */
+export const THC_FREE_PRODUCTS = ["HARMONY", "ESSENTIAL BROAD SPECTRUM"];
+
+export function isThcFreeProduct(productName: string): boolean {
+  return THC_FREE_PRODUCTS.includes(productName);
+}
+
+export interface CombinedPathologyRule {
+  /** Patologia dominante (maior dose alvo em mg, já convertida por peso) */
+  dominant: PathologyInfo | null;
+  doseStart: number;
+  doseTarget: number;
+  doseMax: number;
+  /** Produto sugerido após aplicar a regra de THC */
+  recommendedProduct: string;
+  /** true quando a sugestão final é um produto sem THC */
+  thcFree: boolean;
+  /** true quando havia conflito: uma patologia pedia produto sem THC e outra com THC */
+  thcConflict: boolean;
+  /** Texto consolidado "Nome (CID-10: X); Nome (CID-10: Y)" */
+  diagnosisLabel: string;
+}
+
+/**
+ * Consolida várias patologias em uma única regra de prescrição:
+ * - dose inicial = MENOR das iniciais (start low, go slow)
+ * - dose alvo/máxima = MAIOR das respectivas (patologia mais exigente)
+ * - produto = recomendação da patologia dominante, mas se qualquer patologia
+ *   recomendar produto SEM THC, prevalece o produto sem THC.
+ */
+export function combinePathologies(
+  pathologies: PathologyInfo[],
+  weightKg: number,
+): CombinedPathologyRule {
+  if (pathologies.length === 0) {
+    return {
+      dominant: null, doseStart: 0, doseTarget: 0, doseMax: 0,
+      recommendedProduct: "", thcFree: false, thcConflict: false, diagnosisLabel: "",
+    };
+  }
+
+  const ranges = pathologies.map((p) => ({ p, range: getDoseRange(p, weightKg) }));
+  const doseStart = Math.min(...ranges.map((r) => r.range.start));
+  const doseTarget = Math.max(...ranges.map((r) => r.range.target));
+  const doseMax = Math.max(...ranges.map((r) => r.range.max));
+
+  const dominantEntry = ranges.reduce((acc, cur) => (cur.range.target > acc.range.target ? cur : acc));
+  const dominant = dominantEntry.p;
+
+  const anyThcFree = pathologies.some((p) => isThcFreeProduct(p.recommendedProduct));
+  const anyWithThc = pathologies.some((p) => !isThcFreeProduct(p.recommendedProduct));
+  const thcConflict = pathologies.length > 1 && anyThcFree && anyWithThc;
+
+  let recommendedProduct = dominant.recommendedProduct;
+  if (anyThcFree && !isThcFreeProduct(recommendedProduct)) {
+    // Prevalece a segurança: escolhe o produto sem THC entre as patologias
+    const thcFreePath = pathologies.find((p) => isThcFreeProduct(p.recommendedProduct));
+    recommendedProduct = thcFreePath ? thcFreePath.recommendedProduct : "HARMONY";
+  }
+
+  return {
+    dominant,
+    doseStart,
+    doseTarget,
+    doseMax,
+    recommendedProduct,
+    thcFree: isThcFreeProduct(recommendedProduct),
+    thcConflict,
+    diagnosisLabel: pathologies.map((p) => `${p.name} (CID-10: ${p.cid10})`).join("; "),
+  };
+}
+
+/** Visibilidade de produto considerando várias patologias (visível se válido para qualquer uma). */
+export function isProductAvailableForPathologies(product: Product, pathologies: PathologyInfo[]): boolean {
+  if (pathologies.length === 0) return true;
+  return pathologies.some((p) => isProductAvailableForPathology(product, p));
+}
