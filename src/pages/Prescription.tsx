@@ -318,7 +318,7 @@ export default function Prescription() {
     const insertData = {
       doctor_id: user.id,
       patient_id: patient.id,
-      pathology: primaryPathology.name,
+      pathology: selectedPathologies.map((p) => p.name).join(" + "),
       product: selectedProduct.name,
       dose_per_kg: primaryPathology.doseType === "mg_kg" ? primaryPathology.doseTarget : null,
       calculated_dose: maintenanceDrops * 2 * mgCbdPerDrop,
