@@ -266,7 +266,7 @@ export default function Prescription() {
                 (365.25 * 24 * 60 * 60 * 1000)
             )
           : null,
-        pathology: selectedPathology.name,
+        pathology: primaryPathology.name,
         productLabel: selectedProduct.fullLabel,
         productLine: selectedProduct.productLine || "PRECISION",
         productCannabinoids: cannabinoidsSummary,
@@ -279,18 +279,18 @@ export default function Prescription() {
     }
     // Disparar apenas quando entrar no step 6 (não a cada mudança de answers)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, purpose, selectedPathology, selectedProduct]);
+  }, [step, purpose, primaryPathology, selectedProduct]);
 
   const handleSaveAndDownload = async (docType: "receita" | "guia" | "ambos" | "relatorio") => {
-    if (!user || !patient || !doctor || !selectedProduct || !selectedPathology) return;
+    if (!user || !patient || !doctor || !selectedProduct || !primaryPathology) return;
     setSaving(true);
 
     const mgPerDrop = +(selectedProduct.mgMl / selectedProduct.dropsPerMl).toFixed(2);
     const mgCbdPerDrop = +((selectedProduct.mgMl * selectedProduct.cbdPct) / selectedProduct.dropsPerMl).toFixed(2);
 
     const prescriptionData = {
-      pathology: selectedPathology.name,
-      cid10: selectedPathology.cid10,
+      pathology: primaryPathology.name,
+      cid10: primaryPathology.cid10,
       product: selectedProduct.name,
       productType: selectedProduct.typeLabel,
       titulationSteps,
@@ -316,9 +316,9 @@ export default function Prescription() {
     const insertData = {
       doctor_id: user.id,
       patient_id: patient.id,
-      pathology: selectedPathology.name,
+      pathology: primaryPathology.name,
       product: selectedProduct.name,
-      dose_per_kg: selectedPathology.doseType === "mg_kg" ? selectedPathology.doseTarget : null,
+      dose_per_kg: primaryPathology.doseType === "mg_kg" ? primaryPathology.doseTarget : null,
       calculated_dose: maintenanceDrops * 2 * mgCbdPerDrop,
       titulation_protocol: JSON.parse(JSON.stringify(titulationSteps)),
       tcle_accepted: docType === "guia" || docType === "ambos",
@@ -427,7 +427,7 @@ export default function Prescription() {
   }
 
   const weight = patient.weight || 0;
-  const doseRange = selectedPathology ? getDoseRange(selectedPathology, weight) : null;
+  const doseRange = primaryPathology ? getDoseRange(primaryPathology, weight) : null;
 
   const STEP_LABELS = ["Médico", "Paciente", "Finalidade", "Patologia", "Produto", "Posologia", "Revisão"];
   const totalSteps = 6;
@@ -729,7 +729,7 @@ export default function Prescription() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {filteredPathologies.map((p) => {
                   const range = getDoseRange(p, weight);
-                  const isSelected = selectedPathology?.name === p.name;
+                  const isSelected = primaryPathology?.name === p.name;
                   return (
                     <div
                       key={p.name}
@@ -755,13 +755,13 @@ export default function Prescription() {
               </div>
               <p className="text-xs text-muted-foreground italic">⚕ Todos os valores são sugestões baseadas na literatura. O médico é soberano na decisão terapêutica.</p>
 
-              {selectedPathology && (
-                <ScientificReferencesCard pathologyName={selectedPathology.name} />
+              {primaryPathology && (
+                <ScientificReferencesCard pathologyName={primaryPathology.name} />
               )}
 
               <div className="flex justify-between">
                 <Button variant="outline" onClick={() => setStep(3)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
-                <Button onClick={() => setStep(5)} disabled={!selectedPathology}>Próximo <ArrowRight className="h-4 w-4 ml-1" /></Button>
+                <Button onClick={() => setStep(5)} disabled={!primaryPathology}>Próximo <ArrowRight className="h-4 w-4 ml-1" /></Button>
               </div>
             </CardContent>
           </Card>
@@ -776,16 +776,16 @@ export default function Prescription() {
             </CardHeader>
             <CardContent className="space-y-6">
               {(() => {
-                const visibleProducts = PRODUCTS.filter(p => isProductAvailableForPathology(p, selectedPathology));
+                const visibleProducts = PRODUCTS.filter(p => isProductAvailableForPathologies(p, selectedPathologies));
                 const precision = visibleProducts.filter(p => p.productLine === "PRECISION");
                 const essential = visibleProducts.filter(p => p.productLine === "ESSENTIAL");
 
                 const renderProductCard = (product: Product, opts: { subdued?: boolean } = {}) => {
-                  const isRecommended = selectedPathology?.recommendedProduct === product.name;
+                  const isRecommended = primaryPathology?.recommendedProduct === product.name;
                   const isSelected = selectedProduct?.name === product.name;
                   const isSecondChoice = product.productLine === "ESSENTIAL"
-                    && !!selectedPathology?.recommendedProduct
-                    && (product.secondChoiceFor ?? []).includes(selectedPathology.recommendedProduct);
+                    && !!primaryPathology?.recommendedProduct
+                    && (product.secondChoiceFor ?? []).includes(primaryPathology.recommendedProduct);
                   return (
                     <div
                       key={product.name}
@@ -892,10 +892,10 @@ export default function Prescription() {
                 <Button variant="outline" onClick={() => setStep(4)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
                 <Button
                   onClick={() => {
-                    if (purpose === "RELATORIO_DETALHADO" && selectedProduct && selectedPathology) {
+                    if (purpose === "RELATORIO_DETALHADO" && selectedProduct && primaryPathology) {
                       // Em judicialização, pré-calcula a dose máxima e validade de 1 ano.
                       // O Step 6 será a Anamnese Expandida (não a Posologia padrão).
-                      const range = getDoseRange(selectedPathology, weight);
+                      const range = getDoseRange(primaryPathology, weight);
                       const maxMgDay = range.max;
                       const dropsPerDay = mgDayToDropsDay(maxMgDay, selectedProduct);
                       const dropsPerDose = Math.max(1, Math.round(dropsPerDay / 2));
@@ -1122,7 +1122,7 @@ export default function Prescription() {
         )}
 
         {/* ═══ Step 7: Documentos ═══ */}
-        {step === 7 && selectedProduct && selectedPathology && (
+        {step === 7 && selectedProduct && primaryPathology && (
           <Card>
             <CardHeader>
               <CardTitle>7. Documentos</CardTitle>
