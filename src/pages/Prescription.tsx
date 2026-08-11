@@ -289,8 +289,10 @@ export default function Prescription() {
     const mgCbdPerDrop = +((selectedProduct.mgMl * selectedProduct.cbdPct) / selectedProduct.dropsPerMl).toFixed(2);
 
     const prescriptionData = {
-      pathology: primaryPathology.name,
-      cid10: primaryPathology.cid10,
+      pathology: selectedPathologies.map((p) => p.name).join(" + "),
+      cid10: selectedPathologies.map((p) => p.cid10).join(", "),
+      pathologies: selectedPathologies.map((p) => ({ name: p.name, cid10: p.cid10 })),
+      diagnosisLabel: combined.diagnosisLabel,
       product: selectedProduct.name,
       productType: selectedProduct.typeLabel,
       titulationSteps,
