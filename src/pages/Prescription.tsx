@@ -715,8 +715,8 @@ export default function Prescription() {
         {step === 4 && (
           <Card>
             <CardHeader>
-              <CardTitle>4. Patologia</CardTitle>
-              <CardDescription>Selecione a condição clínica do paciente</CardDescription>
+              <CardTitle>4. Patologias / Comorbidades</CardTitle>
+              <CardDescription>Selecione uma ou mais condições clínicas do paciente</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="relative">
@@ -731,14 +731,14 @@ export default function Prescription() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {filteredPathologies.map((p) => {
                   const range = getDoseRange(p, weight);
-                  const isSelected = primaryPathology?.name === p.name;
+                  const isSelected = selectedPathologies.some((x) => x.name === p.name);
                   return (
                     <div
                       key={p.name}
                       className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${
                         isSelected ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
                       }`}
-                      onClick={() => setSelectedPathology(p)}
+                      onClick={() => togglePathology(p)}
                     >
                       <div className="flex items-center justify-between mb-1">
                         <p className="font-semibold text-sm">{p.name}</p>
@@ -757,13 +757,39 @@ export default function Prescription() {
               </div>
               <p className="text-xs text-muted-foreground italic">⚕ Todos os valores são sugestões baseadas na literatura. O médico é soberano na decisão terapêutica.</p>
 
-              {primaryPathology && (
-                <ScientificReferencesCard pathologyName={primaryPathology.name} />
+              {selectedPathologies.length > 1 && primaryPathology && (
+                <div className="p-4 rounded-lg border border-primary/30 bg-primary/5 space-y-2">
+                  <p className="font-semibold text-sm flex items-center gap-2">
+                    <Stethoscope className="h-4 w-4 text-primary" /> Regra consolidada ({selectedPathologies.length} patologias)
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Patologia dominante (maior dose): <strong>{primaryPathology.name}</strong>
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    <Badge variant="secondary" className="text-xs">Início: {combined.doseStart} mg</Badge>
+                    <Badge className="text-xs bg-primary/80">Alvo: {combined.doseTarget} mg</Badge>
+                    <Badge variant="destructive" className="text-xs">Máx: {combined.doseMax} mg</Badge>
+                    <Badge variant="outline" className="text-xs">Produto sugerido: {combined.recommendedProduct}</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Dose inicial: menor das iniciais (start low, go slow). Dose alvo e máxima: da patologia mais exigente — a quantidade de frascos segue essa dose.
+                  </p>
+                  {combined.thcConflict && (
+                    <p className="text-xs flex items-start gap-2 text-foreground">
+                      <AlertTriangle className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                      Há patologias com indicações divergentes quanto ao THC. Por segurança, a sugestão é o produto <strong>sem THC</strong> ({combined.recommendedProduct}).
+                    </p>
+                  )}
+                </div>
               )}
+
+              {selectedPathologies.map((p) => (
+                <ScientificReferencesCard key={p.name} pathologyName={p.name} />
+              ))}
 
               <div className="flex justify-between">
                 <Button variant="outline" onClick={() => setStep(3)}><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Button>
-                <Button onClick={() => setStep(5)} disabled={!primaryPathology}>Próximo <ArrowRight className="h-4 w-4 ml-1" /></Button>
+                <Button onClick={() => setStep(5)} disabled={selectedPathologies.length === 0}>Próximo <ArrowRight className="h-4 w-4 ml-1" /></Button>
               </div>
             </CardContent>
           </Card>
