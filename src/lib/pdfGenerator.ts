@@ -95,7 +95,6 @@ function createGuideScheduleStep(
 }
 
 function buildPatientGuideSchedule(pd: PrescriptionInfo, product: Product) {
-function buildPatientGuideSchedule(pd: PrescriptionInfo, product: Product) {
   // Resolve todas as patologias (comorbidades). Fallback: nome único.
   const names = pd.pathologies?.length ? pd.pathologies.map((p) => p.name) : [pd.pathology];
   const resolved = names
