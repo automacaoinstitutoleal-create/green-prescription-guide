@@ -809,11 +809,12 @@ export default function Prescription() {
                 const essential = visibleProducts.filter(p => p.productLine === "ESSENTIAL");
 
                 const renderProductCard = (product: Product, opts: { subdued?: boolean } = {}) => {
-                  const isRecommended = primaryPathology?.recommendedProduct === product.name;
+                  const isRecommended = combined.recommendedProduct === product.name;
                   const isSelected = selectedProduct?.name === product.name;
+                  const thcWarning = combined.thcFree && !isThcFreeProduct(product.name);
                   const isSecondChoice = product.productLine === "ESSENTIAL"
-                    && !!primaryPathology?.recommendedProduct
-                    && (product.secondChoiceFor ?? []).includes(primaryPathology.recommendedProduct);
+                    && !!combined.recommendedProduct
+                    && (product.secondChoiceFor ?? []).includes(combined.recommendedProduct);
                   return (
                     <div
                       key={product.name}
