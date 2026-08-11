@@ -927,8 +927,7 @@ export default function Prescription() {
                     if (purpose === "RELATORIO_DETALHADO" && selectedProduct && primaryPathology) {
                       // Em judicialização, pré-calcula a dose máxima e validade de 1 ano.
                       // O Step 6 será a Anamnese Expandida (não a Posologia padrão).
-                      const range = getDoseRange(primaryPathology, weight);
-                      const maxMgDay = range.max;
+                      const maxMgDay = combined.doseMax;
                       const dropsPerDay = mgDayToDropsDay(maxMgDay, selectedProduct);
                       const dropsPerDose = Math.max(1, Math.round(dropsPerDay / 2));
                       setMaintenanceDrops(dropsPerDose);
