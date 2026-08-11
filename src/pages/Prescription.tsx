@@ -833,6 +833,7 @@ export default function Prescription() {
                           <Badge variant="outline">{product.typeLabel}</Badge>
                           {isRecommended && <Badge className="bg-primary text-primary-foreground">✓ Indicado para este caso</Badge>}
                           {isSecondChoice && <Badge variant="secondary">Segunda opção</Badge>}
+                          {thcWarning && <Badge variant="destructive" className="text-xs">Contém THC — comorbidade sugere produto sem THC</Badge>}
                         </div>
                         {isSelected && <Check className="h-5 w-5 text-primary" />}
                       </div>
