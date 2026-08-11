@@ -429,7 +429,9 @@ export default function Prescription() {
   }
 
   const weight = patient.weight || 0;
-  const doseRange = primaryPathology ? getDoseRange(primaryPathology, weight) : null;
+  const doseRange = primaryPathology
+    ? { start: combined.doseStart, target: combined.doseTarget, max: combined.doseMax }
+    : null;
 
   const STEP_LABELS = ["Médico", "Paciente", "Finalidade", "Patologia", "Produto", "Posologia", "Revisão"];
   const totalSteps = 6;
