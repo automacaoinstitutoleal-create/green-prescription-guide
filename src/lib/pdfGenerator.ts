@@ -25,6 +25,8 @@ type PatientInfo = ThemePatientInfo;
 interface PrescriptionInfo {
   pathology: string;
   cid10: string;
+  /** Lista completa de patologias (comorbidades), quando houver mais de uma */
+  pathologies?: { name: string; cid10: string }[];
   product: string;
   productType: string;
   titulationSteps: TitulationStep[];
