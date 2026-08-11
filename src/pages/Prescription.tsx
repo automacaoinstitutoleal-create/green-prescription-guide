@@ -266,7 +266,7 @@ export default function Prescription() {
                 (365.25 * 24 * 60 * 60 * 1000)
             )
           : null,
-        pathology: primaryPathology.name,
+        pathology: selectedPathologies.map((p) => p.name).join(" + "),
         productLabel: selectedProduct.fullLabel,
         productLine: selectedProduct.productLine || "PRECISION",
         productCannabinoids: cannabinoidsSummary,
