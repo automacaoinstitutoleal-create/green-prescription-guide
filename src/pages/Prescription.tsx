@@ -204,13 +204,26 @@ export default function Prescription() {
     setEditableBottles(calc.bottles);
   }, [selectedProduct, patient?.weight, titConfig, purpose, maintenanceDrops]);
 
-  // Set edit fields when pathology changes
+  // Regra consolidada das patologias selecionadas (comorbidades)
+  const combined = useMemo(
+    () => combinePathologies(selectedPathologies, patient?.weight || 0),
+    [selectedPathologies, patient?.weight]
+  );
+  /** Patologia dominante — usada onde é preciso uma única patologia */
+  const primaryPathology = combined.dominant;
+
+  // Diagnóstico consolidado quando as patologias mudam
   useEffect(() => {
-    if (selectedPathology) {
-      setEditDiagnosis(`${selectedPathology.name} (CID-10: ${selectedPathology.cid10})`);
+    if (selectedPathologies.length > 0) {
+      setEditDiagnosis(selectedPathologies.map((p) => `${p.name} (CID-10: ${p.cid10})`).join("; "));
+    } else {
+      setEditDiagnosis("");
     }
-    setSelectedProduct(null);
-  }, [selectedPathology]);
+    // Se o produto escolhido não é mais visível para as patologias, limpa
+    setSelectedProduct((prev) =>
+      prev && !isProductAvailableForPathologies(prev, selectedPathologies) ? null : prev
+    );
+  }, [selectedPathologies]);
 
   useEffect(() => {
     if (selectedProduct) {
