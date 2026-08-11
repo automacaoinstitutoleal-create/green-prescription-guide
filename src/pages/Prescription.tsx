@@ -15,7 +15,7 @@ import {
   PATHOLOGIES, PRODUCTS,
   getDoseRange, mgDayToDropsDay,
   generateTitulationProtocol, calcBottlesFromSchedule,
-  isProductAvailableForPathology,
+  isProductAvailableForPathologies, combinePathologies, isThcFreeProduct,
   type PathologyInfo, type Product, type TitulationStep, type TitulationConfig,
 } from "@/lib/prescriptionData";
 import { parseLocalDate, formatDateBR } from "@/lib/utils";
