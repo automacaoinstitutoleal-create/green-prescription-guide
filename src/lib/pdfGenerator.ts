@@ -95,8 +95,19 @@ function createGuideScheduleStep(
 }
 
 function buildPatientGuideSchedule(pd: PrescriptionInfo, product: Product) {
-  const pathology = PATHOLOGIES.find((item) => item.name === pd.pathology);
+function buildPatientGuideSchedule(pd: PrescriptionInfo, product: Product) {
+  // Resolve todas as patologias (comorbidades). Fallback: nome único.
+  const names = pd.pathologies?.length ? pd.pathologies.map((p) => p.name) : [pd.pathology];
+  const resolved = names
+    .map((n) => PATHOLOGIES.find((item) => item.name === n))
+    .filter((p): p is NonNullable<typeof p> => !!p);
   const weightKg = pd.patientWeight ?? 0;
+  // Patologia mais exigente (maior dose máxima) governa o esquema
+  const pathology = resolved.length
+    ? resolved.reduce((acc, cur) =>
+        getDoseRange(cur, weightKg).max > getDoseRange(acc, weightKg).max ? cur : acc
+      )
+    : undefined;
 
   if (!pathology || weightKg <= 0) {
     return {
