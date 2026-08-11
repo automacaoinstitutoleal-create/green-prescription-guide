@@ -244,7 +244,7 @@ export default function Prescription() {
       step === 6 &&
       purpose === "RELATORIO_DETALHADO" &&
       patient &&
-      selectedPathology &&
+      primaryPathology &&
       selectedProduct
     ) {
       // Verifica se algum campo já tem texto — se sim, médico já editou,
