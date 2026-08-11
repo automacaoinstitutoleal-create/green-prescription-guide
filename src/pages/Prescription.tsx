@@ -110,8 +110,12 @@ export default function Prescription() {
     }
   };
 
-  // Step 3 - Pathology
-  const [selectedPathology, setSelectedPathology] = useState<PathologyInfo | null>(null);
+  // Step 3 - Pathologies (múltiplas / comorbidades)
+  const [selectedPathologies, setSelectedPathologies] = useState<PathologyInfo[]>([]);
+  const togglePathology = (p: PathologyInfo) =>
+    setSelectedPathologies((prev) =>
+      prev.some((x) => x.name === p.name) ? prev.filter((x) => x.name !== p.name) : [...prev, p]
+    );
   const [pathologySearch, setPathologySearch] = useState("");
   const filteredPathologies = useMemo(() => {
     if (!pathologySearch.trim()) return PATHOLOGIES;
