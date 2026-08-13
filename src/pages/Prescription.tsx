@@ -204,6 +204,14 @@ export default function Prescription() {
     setEditableBottles(calc.bottles);
   }, [selectedProduct, patient?.weight, titConfig, purpose, maintenanceDrops]);
 
+  // Judicialização: apenas Linha Precision 7237mg é permitida
+  useEffect(() => {
+    if (purpose === "RELATORIO_DETALHADO" && selectedProduct && selectedProduct.productLine === "ESSENTIAL") {
+      setSelectedProduct(null);
+    }
+  }, [purpose, selectedProduct]);
+
+
   // Regra consolidada das patologias selecionadas (comorbidades)
   const combined = useMemo(
     () => combinePathologies(selectedPathologies, patient?.weight || 0),
@@ -806,9 +814,11 @@ export default function Prescription() {
             </CardHeader>
             <CardContent className="space-y-6">
               {(() => {
+                const isLegal = purpose === "RELATORIO_DETALHADO";
                 const visibleProducts = PRODUCTS.filter(p => isProductAvailableForPathologies(p, selectedPathologies));
                 const precision = visibleProducts.filter(p => p.productLine === "PRECISION");
-                const essential = visibleProducts.filter(p => p.productLine === "ESSENTIAL");
+                const essential = isLegal ? [] : visibleProducts.filter(p => p.productLine === "ESSENTIAL");
+
 
                 const renderProductCard = (product: Product, opts: { subdued?: boolean } = {}) => {
                   const isRecommended = combined.recommendedProduct === product.name;
@@ -901,6 +911,14 @@ export default function Prescription() {
                       </div>
                     )}
 
+                    {isLegal && (
+                      <div className="border-t border-border/60 pt-4">
+                        <p className="text-xs text-muted-foreground italic">
+                          Em judicialização, apenas a Linha Precision 7237mg está disponível — a Linha Essential fica bloqueada.
+                        </p>
+                      </div>
+                    )}
+
                     {essential.length > 0 && (
                       <div className="space-y-3 pt-2">
                         <div className="border-t border-border/60 pt-4">
@@ -917,6 +935,7 @@ export default function Prescription() {
                     )}
                   </>
                 );
+
               })()}
 
               <p className="text-xs text-muted-foreground italic">⚕ O médico pode escolher qualquer produto — a recomendação é uma sugestão baseada na literatura.</p>
