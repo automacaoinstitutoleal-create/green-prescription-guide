@@ -204,6 +204,14 @@ export default function Prescription() {
     setEditableBottles(calc.bottles);
   }, [selectedProduct, patient?.weight, titConfig, purpose, maintenanceDrops]);
 
+  // Judicialização: apenas Linha Precision 7237mg é permitida
+  useEffect(() => {
+    if (purpose === "RELATORIO_DETALHADO" && selectedProduct && selectedProduct.productLine === "ESSENTIAL") {
+      setSelectedProduct(null);
+    }
+  }, [purpose, selectedProduct]);
+
+
   // Regra consolidada das patologias selecionadas (comorbidades)
   const combined = useMemo(
     () => combinePathologies(selectedPathologies, patient?.weight || 0),
