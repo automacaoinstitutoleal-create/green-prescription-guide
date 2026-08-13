@@ -806,9 +806,11 @@ export default function Prescription() {
             </CardHeader>
             <CardContent className="space-y-6">
               {(() => {
+                const isLegal = purpose === "RELATORIO_DETALHADO";
                 const visibleProducts = PRODUCTS.filter(p => isProductAvailableForPathologies(p, selectedPathologies));
                 const precision = visibleProducts.filter(p => p.productLine === "PRECISION");
-                const essential = visibleProducts.filter(p => p.productLine === "ESSENTIAL");
+                const essential = isLegal ? [] : visibleProducts.filter(p => p.productLine === "ESSENTIAL");
+
 
                 const renderProductCard = (product: Product, opts: { subdued?: boolean } = {}) => {
                   const isRecommended = combined.recommendedProduct === product.name;
