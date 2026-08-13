@@ -903,6 +903,14 @@ export default function Prescription() {
                       </div>
                     )}
 
+                    {isLegal && (
+                      <div className="border-t border-border/60 pt-4">
+                        <p className="text-xs text-muted-foreground italic">
+                          Em judicialização, apenas a Linha Precision 7237mg está disponível — a Linha Essential fica bloqueada.
+                        </p>
+                      </div>
+                    )}
+
                     {essential.length > 0 && (
                       <div className="space-y-3 pt-2">
                         <div className="border-t border-border/60 pt-4">
@@ -919,6 +927,7 @@ export default function Prescription() {
                     )}
                   </>
                 );
+
               })()}
 
               <p className="text-xs text-muted-foreground italic">⚕ O médico pode escolher qualquer produto — a recomendação é uma sugestão baseada na literatura.</p>
