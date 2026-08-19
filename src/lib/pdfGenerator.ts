@@ -835,15 +835,19 @@ export function generateLegalReportPDF({
 
   // ─── Conclusão clínica ───
   y = drawSectionHeader(doc, y, "Conclusão clínica", { number: conclusionNumber });
+
+  // Parágrafo-padrão com as palavras-chave jurídico-clínicas exigidas
+  // para maximizar a possibilidade de ganho do paciente ao tratamento.
+  const keywordText = isSUS
+    ? `Considerando o quadro clínico apresentado, o esgotamento das alternativas terapêuticas disponíveis no sistema público de saúde e o perfil de segurança e eficácia do canabidiol, o tratamento com ${pd.productFullLabel} é IMPRESCINDÍVEL para este paciente. Trata-se de conduta SEGURA e EFICAZ, FUNDAMENTADA EM EVIDÊNCIAS CIENTÍFICAS ROBUSTAS, e consiste na ÚLTIMA TERAPÊUTICA APLICÁVEL diante da ineficácia das opções prévias. O início e a continuidade do tratamento são URGENTES, sob risco de agravamento clínico irreversível e comprometimento da capacidade funcional e da qualidade de vida do paciente.`
+    : `Considerando o quadro clínico apresentado, os resultados insatisfatórios das alternativas terapêuticas previamente tentadas e o perfil de segurança e eficácia do canabidiol, o tratamento com ${pd.productFullLabel} é IMPRESCINDÍVEL para este paciente. Trata-se de conduta SEGURA e EFICAZ, FUNDAMENTADA EM EVIDÊNCIAS CIENTÍFICAS ROBUSTAS, e consiste na ÚLTIMA TERAPÊUTICA APLICÁVEL diante da ineficácia das opções prévias. O início e a continuidade do tratamento são URGENTES, sob risco de agravamento clínico irreversível e comprometimento da capacidade funcional e da qualidade de vida do paciente.`;
+  y = writeParagraph(doc, y, keywordText, { bold: true, gap: 2 });
+
   if (answers.conclusao_texto) {
+    y = writeParagraph(doc, y, "Considerações complementares do médico assistente:", { bold: true, gap: 1 });
     y = writeParagraph(doc, y, answers.conclusao_texto, { gap: 2 });
-  } else {
-    // Fallback ajustado conforme cobertura
-    const fallbackText = isSUS
-      ? `Pelo exposto, atesto que o tratamento com ${pd.productFullLabel} é necessário e indicado para o paciente acima identificado, considerando o quadro clínico apresentado, o esgotamento das alternativas terapêuticas disponíveis no sistema público de saúde e o perfil de segurança e eficácia do canabidiol nas condições deste paciente. A continuidade do tratamento é fundamental para a manutenção da qualidade de vida e da capacidade funcional do paciente.`
-      : `Pelo exposto, atesto que o tratamento com ${pd.productFullLabel} é necessário e indicado para o paciente acima identificado, considerando o quadro clínico apresentado, os resultados insatisfatórios das alternativas terapêuticas previamente tentadas e o perfil de segurança e eficácia do canabidiol nas condições deste paciente. A continuidade do tratamento é fundamental para a manutenção da qualidade de vida e da capacidade funcional do paciente.`;
-    y = writeParagraph(doc, y, fallbackText, { gap: 2 });
   }
+
   if (answers.observacoes_finais) {
     y = writeParagraph(doc, y, "Observações adicionais:", { bold: true, gap: 1 });
     y = writeParagraph(doc, y, answers.observacoes_finais, { gap: 2 });
