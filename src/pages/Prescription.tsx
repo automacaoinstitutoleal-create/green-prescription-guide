@@ -441,6 +441,15 @@ export default function Prescription() {
     ? { start: combined.doseStart, target: combined.doseTarget, max: combined.doseMax }
     : null;
 
+  // Dose sugerida pela literatura (gotas/tomada), destacada para o médico.
+  // Padrão: dose alvo. Judicialização: dose máxima.
+  const literatureMgDay = purpose === "RELATORIO_DETALHADO" ? combined.doseMax : combined.doseTarget;
+  const literatureDrops = selectedProduct && literatureMgDay
+    ? Math.max(1, Math.round(mgDayToDropsDay(literatureMgDay, selectedProduct) / 2))
+    : null;
+  const doseMatchesLiterature = literatureDrops !== null && maintenanceDrops === literatureDrops;
+
+
   const STEP_LABELS = ["Médico", "Paciente", "Finalidade", "Patologia", "Produto", "Posologia", "Revisão"];
   const totalSteps = 6;
 
@@ -978,6 +987,46 @@ export default function Prescription() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Dose da literatura em destaque — editável pelo médico */}
+              <div className="rounded-lg border-2 border-primary bg-primary-soft/50 p-4 space-y-2">
+                <p className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-primary" />
+                  Dose da literatura — {combined.dominant?.name ?? "patologia dominante"}
+                </p>
+                <p className="text-xs text-ink-soft">
+                  Em judicialização a receita usa a <strong>dose máxima</strong> da literatura
+                  {literatureMgDay ? <> (<strong className="font-mono">{literatureMgDay} mg/dia</strong>)</> : null}
+                  {literatureDrops ? <> ≈ <strong className="font-mono">{literatureDrops} gotas/tomada</strong> (12/12h)</> : null}.
+                  O valor é sugerido, mas o médico pode alterá-lo livremente.
+                </p>
+                <div className="flex flex-wrap items-end gap-3">
+                  <div>
+                    <Label>Dose de manutenção (gotas/tomada)</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={80}
+                      className="w-32 border-primary/60 bg-background font-mono font-semibold"
+                      value={maintenanceDrops}
+                      onChange={e => setMaintenanceDrops(Math.max(1, Number(e.target.value) || 1))}
+                    />
+                  </div>
+                  {literatureDrops !== null && !doseMatchesLiterature && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => { setMaintenanceDrops(literatureDrops); setInitialDrops(literatureDrops); }}
+                    >
+                      Restaurar dose da literatura ({literatureDrops})
+                    </Button>
+                  )}
+                  {doseMatchesLiterature && (
+                    <Badge className="bg-primary/80 text-xs">Igual à literatura</Badge>
+                  )}
+                </div>
+              </div>
+
+
               <AnamneseForm
                 answers={anamneseAnswers}
                 onChange={setAnamneseAnswers}
@@ -1033,10 +1082,35 @@ export default function Prescription() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
-                  <Label>Dose de manutenção (gotas/tomada)</Label>
-                  <Input type="number" min={1} max={50} value={maintenanceDrops} onChange={e => setMaintenanceDrops(Number(e.target.value) || 1)} />
+                <div className="rounded-lg border-2 border-primary bg-primary-soft/50 p-2 -m-1">
+                  <Label className="flex items-center gap-1.5">
+                    Dose de manutenção (gotas/tomada)
+                    {doseMatchesLiterature && <Badge className="bg-primary/80 text-[10px]">literatura</Badge>}
+                  </Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={80}
+                    className="border-primary/60 bg-background font-mono font-semibold"
+                    value={maintenanceDrops}
+                    onChange={e => setMaintenanceDrops(Math.max(1, Number(e.target.value) || 1))}
+                  />
+                  {literatureDrops !== null && (
+                    <p className="mt-1 text-[11px] text-ink-soft">
+                      Literatura: <strong className="font-mono">{literatureDrops} gotas/tomada</strong> ({literatureMgDay} mg/dia).{" "}
+                      {!doseMatchesLiterature && (
+                        <button
+                          type="button"
+                          className="font-medium text-primary underline"
+                          onClick={() => setMaintenanceDrops(literatureDrops)}
+                        >
+                          Restaurar
+                        </button>
+                      )}
+                    </p>
+                  )}
                 </div>
+
               </div>
 
               {/* Selectors row 2 */}
