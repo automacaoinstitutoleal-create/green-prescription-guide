@@ -987,6 +987,46 @@ export default function Prescription() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Dose da literatura em destaque — editável pelo médico */}
+              <div className="rounded-lg border-2 border-primary bg-primary-soft/50 p-4 space-y-2">
+                <p className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-primary" />
+                  Dose da literatura — {combined.dominant?.name ?? "patologia dominante"}
+                </p>
+                <p className="text-xs text-ink-soft">
+                  Em judicialização a receita usa a <strong>dose máxima</strong> da literatura
+                  {literatureMgDay ? <> (<strong className="font-mono">{literatureMgDay} mg/dia</strong>)</> : null}
+                  {literatureDrops ? <> ≈ <strong className="font-mono">{literatureDrops} gotas/tomada</strong> (12/12h)</> : null}.
+                  O valor é sugerido, mas o médico pode alterá-lo livremente.
+                </p>
+                <div className="flex flex-wrap items-end gap-3">
+                  <div>
+                    <Label>Dose de manutenção (gotas/tomada)</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={80}
+                      className="w-32 border-primary/60 bg-background font-mono font-semibold"
+                      value={maintenanceDrops}
+                      onChange={e => setMaintenanceDrops(Math.max(1, Number(e.target.value) || 1))}
+                    />
+                  </div>
+                  {literatureDrops !== null && !doseMatchesLiterature && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => { setMaintenanceDrops(literatureDrops); setInitialDrops(literatureDrops); }}
+                    >
+                      Restaurar dose da literatura ({literatureDrops})
+                    </Button>
+                  )}
+                  {doseMatchesLiterature && (
+                    <Badge className="bg-primary/80 text-xs">Igual à literatura</Badge>
+                  )}
+                </div>
+              </div>
+
+
               <AnamneseForm
                 answers={anamneseAnswers}
                 onChange={setAnamneseAnswers}
