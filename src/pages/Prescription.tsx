@@ -1082,10 +1082,35 @@ export default function Prescription() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
-                  <Label>Dose de manutenção (gotas/tomada)</Label>
-                  <Input type="number" min={1} max={50} value={maintenanceDrops} onChange={e => setMaintenanceDrops(Number(e.target.value) || 1)} />
+                <div className="rounded-lg border-2 border-primary bg-primary-soft/50 p-2 -m-1">
+                  <Label className="flex items-center gap-1.5">
+                    Dose de manutenção (gotas/tomada)
+                    {doseMatchesLiterature && <Badge className="bg-primary/80 text-[10px]">literatura</Badge>}
+                  </Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={80}
+                    className="border-primary/60 bg-background font-mono font-semibold"
+                    value={maintenanceDrops}
+                    onChange={e => setMaintenanceDrops(Math.max(1, Number(e.target.value) || 1))}
+                  />
+                  {literatureDrops !== null && (
+                    <p className="mt-1 text-[11px] text-ink-soft">
+                      Literatura: <strong className="font-mono">{literatureDrops} gotas/tomada</strong> ({literatureMgDay} mg/dia).{" "}
+                      {!doseMatchesLiterature && (
+                        <button
+                          type="button"
+                          className="font-medium text-primary underline"
+                          onClick={() => setMaintenanceDrops(literatureDrops)}
+                        >
+                          Restaurar
+                        </button>
+                      )}
+                    </p>
+                  )}
                 </div>
+
               </div>
 
               {/* Selectors row 2 */}
