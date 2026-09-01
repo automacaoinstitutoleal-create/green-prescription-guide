@@ -441,6 +441,15 @@ export default function Prescription() {
     ? { start: combined.doseStart, target: combined.doseTarget, max: combined.doseMax }
     : null;
 
+  // Dose sugerida pela literatura (gotas/tomada), destacada para o médico.
+  // Padrão: dose alvo. Judicialização: dose máxima.
+  const literatureMgDay = purpose === "RELATORIO_DETALHADO" ? combined.doseMax : combined.doseTarget;
+  const literatureDrops = selectedProduct && literatureMgDay
+    ? Math.max(1, Math.round(mgDayToDropsDay(literatureMgDay, selectedProduct) / 2))
+    : null;
+  const doseMatchesLiterature = literatureDrops !== null && maintenanceDrops === literatureDrops;
+
+
   const STEP_LABELS = ["Médico", "Paciente", "Finalidade", "Patologia", "Produto", "Posologia", "Revisão"];
   const totalSteps = 6;
 
