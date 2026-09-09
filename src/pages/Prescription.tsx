@@ -348,6 +348,9 @@ export default function Prescription() {
         generatePrescriptionPDF({ doctor: pdfDoctor, patient, prescriptionData });
       }
       if (docType === "guia" || docType === "ambos") {
+        // Pequeno intervalo entre os dois downloads: alguns navegadores
+        // descartam o segundo arquivo quando salvos no mesmo instante.
+        if (docType === "ambos") await new Promise((r) => setTimeout(r, 700));
         generatePatientGuidePDF({ doctor: pdfDoctor, patient, prescriptionData, product: selectedProduct });
       }
       if (docType === "relatorio") {
