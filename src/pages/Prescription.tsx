@@ -953,15 +953,18 @@ export default function Prescription() {
                 <Button
                   onClick={() => {
                     if (purpose === "RELATORIO_DETALHADO" && selectedProduct && primaryPathology) {
-                      // Em judicialização, pré-calcula a dose máxima e validade de 1 ano.
-                      // O Step 6 será a Anamnese Expandida (não a Posologia padrão).
-                      const maxMgDay = combined.doseMax;
-                      const dropsPerDay = mgDayToDropsDay(maxMgDay, selectedProduct);
-                      const dropsPerDose = Math.max(1, Math.round(dropsPerDay / 2));
-                      setMaintenanceDrops(dropsPerDose);
-                      setInitialDrops(dropsPerDose);
-                      setIncrement(0);
-                      setIntervalDays(0);
+                      // Em judicialização a receita é emitida na dose MÁXIMA (uso
+                      // contínuo, validade 1 ano), mas o Guia do Paciente precisa
+                      // manter a titulação progressiva: começa na dose inicial da
+                      // literatura e sobe até a manutenção.
+                      const maxDropsDay = mgDayToDropsDay(combined.doseMax, selectedProduct);
+                      const maintDose = Math.max(1, Math.round(maxDropsDay / 2));
+                      const startDropsDay = mgDayToDropsDay(combined.doseStart, selectedProduct);
+                      const startDose = Math.min(maintDose, Math.max(1, Math.round(startDropsDay / 2)));
+                      setMaintenanceDrops(maintDose);
+                      setInitialDrops(startDose);
+                      setIncrement(2);
+                      setIntervalDays(7);
                       const oneYear = new Date();
                       oneYear.setFullYear(oneYear.getFullYear() + 1);
                       setReturnDate(oneYear.toISOString().slice(0, 10));
