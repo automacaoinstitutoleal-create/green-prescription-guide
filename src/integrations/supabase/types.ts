@@ -55,6 +55,51 @@ export type Database = {
           },
         ]
       }
+      app_error_logs: {
+        Row: {
+          created_at: string
+          doctor_id: string
+          error_message: string
+          error_type: string
+          id: string
+          occurred_at: string
+          operation: string
+          page_url: string | null
+          screen: string
+          stage: string
+          technical_context: Json
+          user_agent: string | null
+        }
+        Insert: {
+          created_at?: string
+          doctor_id: string
+          error_message: string
+          error_type?: string
+          id?: string
+          occurred_at?: string
+          operation: string
+          page_url?: string | null
+          screen: string
+          stage: string
+          technical_context?: Json
+          user_agent?: string | null
+        }
+        Update: {
+          created_at?: string
+          doctor_id?: string
+          error_message?: string
+          error_type?: string
+          id?: string
+          occurred_at?: string
+          operation?: string
+          page_url?: string | null
+          screen?: string
+          stage?: string
+          technical_context?: Json
+          user_agent?: string | null
+        }
+        Relationships: []
+      }
       doctor_profiles: {
         Row: {
           address: string | null
