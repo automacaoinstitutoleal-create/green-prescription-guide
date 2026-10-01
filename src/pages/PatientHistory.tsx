@@ -8,6 +8,7 @@ import { Download, FileText, BookOpen, Calendar, Activity, Scale } from "lucide-
 import { generatePrescriptionPDF, generatePatientGuidePDF } from "@/lib/pdfGenerator";
 import { PRODUCTS } from "@/lib/prescriptionData";
 import { cn, formatDateBR } from "@/lib/utils";
+import { reportAppError } from "@/lib/errorLogger";
 
 interface PrescriptionRow {
   id: string;
@@ -61,6 +62,9 @@ export default function PatientHistory() {
       supabase.from("prescriptions").select("*").eq("patient_id", patientId).eq("doctor_id", user.id).order("created_at", { ascending: false }),
       supabase.from("doctor_profiles").select("full_name, crm, specialty, phone, address").eq("user_id", user.id).single(),
     ]).then(([patRes, prescRes, docRes]) => {
+      if (patRes.error) void reportAppError({ screen: "historico_paciente", operation: "carregar_paciente", stage: "abertura", error: patRes.error, doctorId: user.id });
+      if (prescRes.error) void reportAppError({ screen: "historico_paciente", operation: "carregar_receitas", stage: "abertura", error: prescRes.error, doctorId: user.id });
+      if (docRes.error) void reportAppError({ screen: "historico_paciente", operation: "carregar_perfil_medico", stage: "abertura", error: docRes.error, doctorId: user.id });
       if (patRes.data) setPatient(patRes.data);
       if (prescRes.data) setPrescriptions(prescRes.data as PrescriptionRow[]);
       if (docRes.data) setDoctor(docRes.data);
@@ -70,16 +74,24 @@ export default function PatientHistory() {
 
   const handleRedownload = (presc: PrescriptionRow) => {
     if (!patient || !doctor) return;
-    const pd = presc.prescription_data as unknown as Parameters<typeof generatePrescriptionPDF>[0]["prescriptionData"];
-    generatePrescriptionPDF({ doctor, patient, prescriptionData: pd });
+    try {
+      const pd = presc.prescription_data as unknown as Parameters<typeof generatePrescriptionPDF>[0]["prescriptionData"];
+      generatePrescriptionPDF({ doctor, patient, prescriptionData: pd });
+    } catch (error) {
+      void reportAppError({ screen: "historico_paciente", operation: "baixar_receita", stage: "regenerar_pdf", error, doctorId: user?.id });
+    }
   };
 
   const handleDownloadGuide = (presc: PrescriptionRow) => {
     if (!patient || !doctor) return;
-    const pd = presc.prescription_data as unknown as Parameters<typeof generatePatientGuidePDF>[0]["prescriptionData"];
-    const product = PRODUCTS.find((p) => p.name === presc.product);
-    if (!product) return;
-    generatePatientGuidePDF({ doctor, patient, prescriptionData: pd, product });
+    try {
+      const pd = presc.prescription_data as unknown as Parameters<typeof generatePatientGuidePDF>[0]["prescriptionData"];
+      const product = PRODUCTS.find((p) => p.name === presc.product);
+      if (!product) throw new Error("Produto da receita não localizado");
+      generatePatientGuidePDF({ doctor, patient, prescriptionData: pd, product });
+    } catch (error) {
+      void reportAppError({ screen: "historico_paciente", operation: "baixar_guia", stage: "regenerar_pdf", error, doctorId: user?.id });
+    }
   };
 
   const age = useMemo(() => (patient?.birth_date ? ageFromBirth(patient.birth_date) : null), [patient]);

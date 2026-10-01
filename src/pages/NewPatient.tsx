@@ -152,7 +152,7 @@ export default function NewPatient() {
     };
 
     const { error } = isEdit
-      ? await supabase.from("patients").update(payload).eq("id", patientId!)
+      ? await supabase.from("patients").update(payload).eq("id", patientId ?? "")
       : await supabase.from("patients").insert({ doctor_id: user.id, ...payload });
 
     setLoading(false);
