@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { flushQueuedErrorLogs, reportAppError } from "@/lib/errorLogger";
 
 interface AuthContextType {
   user: User | null;
@@ -29,20 +30,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
+        if (session?.user) void flushQueuedErrorLogs(session.user.id);
       }
     );
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+      if (session?.user) void flushQueuedErrorLogs(session.user.id);
+      if (error) void reportAppError({ screen: "autenticacao", operation: "restaurar_sessao", stage: "carregamento_inicial", error });
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut();
+    if (error) void reportAppError({ screen: "navegacao", operation: "encerrar_sessao", stage: "logout", error, doctorId: user?.id });
   };
 
   return (

@@ -26,6 +26,7 @@ import { ScientificReferencesCard } from "@/components/ScientificReferencesCard"
 import { AnamneseForm } from "@/components/AnamneseForm";
 import { AppShell } from "@/components/AppShell";
 import { cn } from "@/lib/utils";
+import { reportAppError } from "@/lib/errorLogger";
 
 interface Patient {
   id: string;
@@ -103,6 +104,7 @@ export default function Prescription() {
       .single();
     setSavingPatient(false);
     if (error) {
+      void reportAppError({ screen: "prescricao", operation: "atualizar_paciente", stage: "etapa_2", error, doctorId: user?.id, context: { step } });
       toast.error("Erro ao atualizar paciente: " + error.message);
     } else {
       setPatient(data as Patient);
@@ -160,6 +162,8 @@ export default function Prescription() {
       supabase.from("patients").select("*").eq("id", patientId).eq("doctor_id", user.id).single(),
       supabase.from("doctor_profiles").select("full_name, crm, specialty, phone, address").eq("user_id", user.id).single(),
     ]).then(([patRes, docRes]) => {
+      if (patRes.error) void reportAppError({ screen: "prescricao", operation: "carregar_paciente", stage: "abertura", error: patRes.error, doctorId: user.id });
+      if (docRes.error) void reportAppError({ screen: "prescricao", operation: "carregar_perfil_medico", stage: "abertura", error: docRes.error, doctorId: user.id });
       if (patRes.data) setPatient(patRes.data);
       if (docRes.data) {
         setDoctor(docRes.data);
@@ -292,14 +296,17 @@ export default function Prescription() {
 
   const handleSaveAndDownload = async (docType: "receita" | "guia" | "ambos" | "relatorio") => {
     if (!user || !patient || !doctor) {
+      void reportAppError({ screen: "prescricao", operation: "gerar_documento", stage: `etapa_${step}_dados_incompletos`, error: new Error("Dados essenciais não carregados"), doctorId: user?.id, context: { docType, hasUser: Boolean(user), hasDoctor: Boolean(doctor), step } });
       toast.error("Não foi possível carregar os dados do médico ou do paciente. Atualize a página e tente novamente.");
       return;
     }
     if (!selectedProduct || !primaryPathology) {
+      void reportAppError({ screen: "prescricao", operation: "gerar_documento", stage: `etapa_${step}_selecao_incompleta`, error: new Error("Patologia ou produto não selecionado"), doctorId: user.id, context: { docType, hasProduct: Boolean(selectedProduct), pathologyCount: selectedPathologies.length, step } });
       toast.error("Selecione uma patologia e um produto antes de gerar o documento.");
       return;
     }
     if (!editDoctor.full_name.trim() || !editDoctor.crm.trim()) {
+      void reportAppError({ screen: "prescricao", operation: "gerar_documento", stage: "etapa_1_identificacao_medica", error: new Error("Nome ou CRM ausente"), doctorId: user.id, context: { docType, hasCrm: Boolean(editDoctor.crm.trim()), step } });
       toast.error("Preencha o nome e o CRM do médico na primeira etapa antes de gerar o documento.");
       return;
     }
@@ -351,6 +358,7 @@ export default function Prescription() {
 
     const { error } = await supabase.from("prescriptions").insert(insertData);
     if (error) {
+      void reportAppError({ screen: "prescricao", operation: "salvar_receita", stage: `etapa_${step}_persistencia`, error, doctorId: user.id, context: { docType, purpose: purpose || "nao_definido", step, pathologyCount: selectedPathologies.length } });
       toast.error("Erro ao salvar receita: " + error.message);
       setSaving(false);
       return;
@@ -426,6 +434,7 @@ export default function Prescription() {
       toast.success("Documento pronto. Toque no botão de baixar que apareceu abaixo.");
     } catch (e) {
       console.error("Erro ao gerar PDF:", e);
+      void reportAppError({ screen: "prescricao", operation: "gerar_pdf", stage: `etapa_${step}_documento`, error: e, doctorId: user.id, context: { docType, purpose: purpose || "nao_definido", step } });
       toast.error("Receita salva, mas houve erro ao gerar o PDF.");
     }
     setSaving(false);

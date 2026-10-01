@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { AppShell } from "@/components/AppShell";
 import { toast } from "sonner";
 import { Save, IdCard } from "lucide-react";
+import { reportAppError } from "@/lib/errorLogger";
 
 export default function Profile() {
   const { user } = useAuth();
@@ -22,7 +23,8 @@ export default function Profile() {
 
   useEffect(() => {
     if (!user) return;
-    supabase.from("doctor_profiles").select("*").eq("user_id", user.id).single().then(({ data }) => {
+    supabase.from("doctor_profiles").select("*").eq("user_id", user.id).single().then(({ data, error }) => {
+      if (error) void reportAppError({ screen: "perfil", operation: "carregar_perfil", stage: "carregamento", error, doctorId: user.id });
       if (data) {
         setForm({
           full_name: data.full_name || "",
@@ -44,6 +46,7 @@ export default function Profile() {
     const { error } = await supabase.from("doctor_profiles").update(updateData).eq("user_id", user.id);
     setLoading(false);
     if (error) {
+      void reportAppError({ screen: "perfil", operation: "salvar_perfil", stage: "atualizacao", error, doctorId: user.id });
       toast.error("Erro ao salvar: " + error.message);
     } else {
       toast.success("Perfil atualizado");

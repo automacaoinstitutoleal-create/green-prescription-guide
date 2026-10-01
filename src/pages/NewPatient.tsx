@@ -10,6 +10,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { AppShell } from "@/components/AppShell";
 import { toast } from "sonner";
 import { Save, UserPlus, UserCog2, Users, Heart, ShieldAlert } from "lucide-react";
+import { reportAppError } from "@/lib/errorLogger";
 
 type HealthcareCoverage = "SUS" | "PLANO" | "PARTICULAR";
 
@@ -75,6 +76,7 @@ export default function NewPatient() {
         .eq("id", patientId)
         .single();
       if (error || !data) {
+        void reportAppError({ screen: "cadastro_paciente", operation: "carregar_paciente", stage: "edicao", error: error || new Error("Paciente não encontrado"), doctorId: user.id, context: { isEdit } });
         toast.error("Paciente não encontrado");
         navigate("/");
         return;
@@ -150,11 +152,12 @@ export default function NewPatient() {
     };
 
     const { error } = isEdit
-      ? await supabase.from("patients").update(payload).eq("id", patientId!)
+      ? await supabase.from("patients").update(payload).eq("id", patientId ?? "")
       : await supabase.from("patients").insert({ doctor_id: user.id, ...payload });
 
     setLoading(false);
     if (error) {
+      void reportAppError({ screen: "cadastro_paciente", operation: isEdit ? "atualizar_paciente" : "cadastrar_paciente", stage: "salvar", error, doctorId: user.id, context: { isEdit, isMinor: minorRequiresGuardian } });
       toast.error((isEdit ? "Erro ao atualizar: " : "Erro ao cadastrar: ") + error.message);
     } else {
       toast.success(isEdit ? "Paciente atualizado" : "Paciente cadastrado");

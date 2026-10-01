@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { BrandMark } from "@/components/BrandMark";
+import { reportAppError } from "@/lib/errorLogger";
 
 export default function ResetPassword() {
   const navigate = useNavigate();
@@ -39,6 +40,7 @@ export default function ResetPassword() {
     const { error } = await supabase.auth.updateUser({ password });
     setLoading(false);
     if (error) {
+      void reportAppError({ screen: "redefinir_senha", operation: "alterar_senha", stage: "salvar_nova_senha", error });
       toast.error("Não foi possível redefinir: " + error.message);
     } else {
       toast.success("Senha redefinida com sucesso.");

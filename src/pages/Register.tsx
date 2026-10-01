@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { BrandMark } from "@/components/BrandMark";
 import { ArrowRight, ShieldCheck } from "lucide-react";
+import { reportAppError } from "@/lib/errorLogger";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -31,17 +32,19 @@ export default function Register() {
     });
 
     if (error) {
+      void reportAppError({ screen: "cadastro_medico", operation: "criar_conta", stage: "autenticacao", error });
       toast.error("Erro no cadastro: " + error.message);
       setLoading(false);
       return;
     }
 
     if (data.user) {
-      await supabase.from("doctor_profiles").update({
+      const { error: profileError } = await supabase.from("doctor_profiles").update({
         crm,
         specialty,
         full_name: fullName,
       }).eq("user_id", data.user.id);
+      if (profileError) void reportAppError({ screen: "cadastro_medico", operation: "atualizar_perfil", stage: "dados_profissionais", error: profileError, doctorId: data.session?.user.id });
     }
 
     setLoading(false);

@@ -1,4 +1,5 @@
 import { Component, ErrorInfo, ReactNode } from "react";
+import { reportAppError } from "@/lib/errorLogger";
 
 interface Props {
   children: ReactNode;
@@ -24,6 +25,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("[ErrorBoundary]", error, errorInfo);
+    void reportAppError({ screen: "aplicacao", operation: "renderizar_tela", stage: "erro_inesperado", error, errorType: "react_render_error" });
     this.setState({ errorInfo });
   }
 
