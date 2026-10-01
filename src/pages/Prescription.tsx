@@ -58,6 +58,7 @@ export default function Prescription() {
   const [doctor, setDoctor] = useState<DoctorProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [readyDocuments, setReadyDocuments] = useState<{ label: string; filename: string; url: string }[]>([]);
 
   // Step 1 - Doctor (editable for this prescription)
   const [editDoctor, setEditDoctor] = useState({ full_name: "", crm: "", specialty: "", phone: "", address: "" });
@@ -290,8 +291,21 @@ export default function Prescription() {
   }, [step, purpose, primaryPathology, selectedProduct]);
 
   const handleSaveAndDownload = async (docType: "receita" | "guia" | "ambos" | "relatorio") => {
-    if (!user || !patient || !doctor || !selectedProduct || !primaryPathology) return;
+    if (!user || !patient || !doctor) {
+      toast.error("Não foi possível carregar os dados do médico ou do paciente. Atualize a página e tente novamente.");
+      return;
+    }
+    if (!selectedProduct || !primaryPathology) {
+      toast.error("Selecione uma patologia e um produto antes de gerar o documento.");
+      return;
+    }
+    if (!editDoctor.full_name.trim() || !editDoctor.crm.trim()) {
+      toast.error("Preencha o nome e o CRM do médico na primeira etapa antes de gerar o documento.");
+      return;
+    }
     setSaving(true);
+    readyDocuments.forEach((document) => URL.revokeObjectURL(document.url));
+    setReadyDocuments([]);
 
     const mgPerDrop = +(selectedProduct.mgMl / selectedProduct.dropsPerMl).toFixed(2);
     const mgCbdPerDrop = +((selectedProduct.mgMl * selectedProduct.cbdPct) / selectedProduct.dropsPerMl).toFixed(2);
@@ -344,14 +358,14 @@ export default function Prescription() {
 
     try {
       const pdfDoctor = editDoctor;
+      const generated: { label: string; filename: string; url: string }[] = [];
       if (docType === "receita" || docType === "ambos") {
-        generatePrescriptionPDF({ doctor: pdfDoctor, patient, prescriptionData });
+        const pdf = generatePrescriptionPDF({ doctor: pdfDoctor, patient, prescriptionData, autoSave: false });
+        generated.push({ label: "Baixar Receita Médica", filename: pdf.filename, url: URL.createObjectURL(pdf.blob) });
       }
       if (docType === "guia" || docType === "ambos") {
-        // Pequeno intervalo entre os dois downloads: alguns navegadores
-        // descartam o segundo arquivo quando salvos no mesmo instante.
-        if (docType === "ambos") await new Promise((r) => setTimeout(r, 700));
-        generatePatientGuidePDF({ doctor: pdfDoctor, patient, prescriptionData, product: selectedProduct });
+        const pdf = generatePatientGuidePDF({ doctor: pdfDoctor, patient, prescriptionData, product: selectedProduct, autoSave: false });
+        generated.push({ label: "Baixar Guia do Paciente", filename: pdf.filename, url: URL.createObjectURL(pdf.blob) });
       }
       if (docType === "relatorio") {
         // Calcula idade do paciente
@@ -394,7 +408,7 @@ export default function Prescription() {
             }
           : null;
 
-        generateLegalReportPDF({
+        const pdf = generateLegalReportPDF({
           doctor: pdfDoctor,
           patient,
           prescriptionData,
@@ -404,9 +418,12 @@ export default function Prescription() {
           patientAge,
           healthcareCoverage: coverage,
           legalGuardian: guardian,
+          autoSave: false,
         });
+        generated.push({ label: "Baixar Relatório Médico", filename: pdf.filename, url: URL.createObjectURL(pdf.blob) });
       }
-      toast.success("PDF gerado com sucesso! Você pode gerar outro documento ou finalizar.");
+      setReadyDocuments(generated);
+      toast.success("Documento pronto. Toque no botão de baixar que apareceu abaixo.");
     } catch (e) {
       console.error("Erro ao gerar PDF:", e);
       toast.error("Receita salva, mas houve erro ao gerar o PDF.");
@@ -454,7 +471,7 @@ export default function Prescription() {
 
 
   const STEP_LABELS = ["Médico", "Paciente", "Finalidade", "Patologia", "Produto", "Posologia", "Revisão"];
-  const totalSteps = 6;
+  const totalSteps = 7;
 
   return (
     <AppShell
@@ -1321,6 +1338,20 @@ export default function Prescription() {
                     <Download className="h-4 w-4 mr-1" /> {saving ? "Gerando..." : "Gerar Receita + Guia"}
                   </Button>
                 </div>
+                {readyDocuments.length > 0 && (
+                  <div className="rounded-lg border-2 border-primary bg-primary-soft/40 p-4 space-y-3">
+                    <p className="font-semibold text-foreground">Documento pronto para baixar</p>
+                    <div className="flex flex-wrap gap-2">
+                      {readyDocuments.map((document) => (
+                        <Button key={document.filename} asChild>
+                          <a href={document.url} download={document.filename} target="_blank" rel="noreferrer">
+                            <Download className="h-4 w-4 mr-1" /> {document.label}
+                          </a>
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {purpose === "RELATORIO_DETALHADO" && (
                   <p className="text-xs text-ink-soft italic">
                     O Relatório Médico Detalhado é gerado a partir da anamnese clínica que você preencheu na etapa anterior. É um documento médico fundamentado, sem termos jurídicos.
