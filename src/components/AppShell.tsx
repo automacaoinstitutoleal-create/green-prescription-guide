@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { BrandLockup, BrandMark } from "@/components/BrandMark";
+import { reportAppError } from "@/lib/errorLogger";
 import {
   Users,
   BookOpen,
@@ -77,6 +78,7 @@ export function AppShell({
       .then(undefined, (err) => {
         // Falha não-fatal: AppShell ainda renderiza sem o bloco de doctor.
         console.warn("[AppShell] não foi possível carregar perfil:", err);
+        void reportAppError({ screen: "estrutura_principal", operation: "carregar_resumo_medico", stage: "menu_lateral", error: err, doctorId: user.id });
       });
     return () => {
       cancelled = true;

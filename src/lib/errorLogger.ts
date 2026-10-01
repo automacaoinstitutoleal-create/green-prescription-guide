@@ -49,7 +49,7 @@ function safeContext(context?: Record<string, SafeValue>) {
   if (!context) return {};
   return Object.fromEntries(
     Object.entries(context)
-      .filter(([key, value]) => !BLOCKED_CONTEXT_KEYS.test(key) && ["string", "number", "boolean"].includes(typeof value) || value === null)
+      .filter(([key, value]) => !BLOCKED_CONTEXT_KEYS.test(key) && (["string", "number", "boolean"].includes(typeof value) || value === null))
       .slice(0, 20)
       .map(([key, value]) => [truncate(key, 80), typeof value === "string" ? truncate(value, 200) : value ?? null]),
   );

@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { reportAppError } from "@/lib/errorLogger";
 
 interface Patient {
   id: string;
@@ -81,22 +82,24 @@ export default function Dashboard() {
 
   const loadData = async () => {
     if (!user) return;
-    const { data: patRes } = await supabase
+    const { data: patRes, error: patientsError } = await supabase
       .from("patients")
       .select("id, full_name, cpf, birth_date, weight, created_at")
       .eq("doctor_id", user.id)
       .order("created_at", { ascending: false });
+    if (patientsError) void reportAppError({ screen: "pacientes", operation: "listar_pacientes", stage: "carregamento", error: patientsError, doctorId: user.id });
 
     if (patRes) {
       const patientsWithPrescriptions = await Promise.all(
         patRes.map(async (p) => {
-          const { data: lastPresc } = await supabase
+          const { data: lastPresc, error: prescriptionError } = await supabase
             .from("prescriptions")
             .select("created_at, product")
             .eq("patient_id", p.id)
             .order("created_at", { ascending: false })
             .limit(1)
             .single();
+          if (prescriptionError && prescriptionError.code !== "PGRST116") void reportAppError({ screen: "pacientes", operation: "carregar_ultima_receita", stage: "resumo", error: prescriptionError, doctorId: user.id });
           return { ...p, last_prescription: lastPresc };
         })
       );
@@ -108,11 +111,12 @@ export default function Dashboard() {
   const loadAnnotations = async (patientId: string) => {
     setAnnotationPatientId(patientId);
     setLoadingAnnotations(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("annotations")
       .select("*")
       .eq("patient_id", patientId)
       .order("date", { ascending: false });
+    if (error) void reportAppError({ screen: "pacientes", operation: "listar_anotacoes", stage: "acompanhamento", error, doctorId: user?.id, context: { hasPatientId: Boolean(patientId) } });
     setAnnotations((data as Annotation[]) || []);
     setLoadingAnnotations(false);
   };
@@ -126,6 +130,7 @@ export default function Dashboard() {
       current_dose: newAnnotation.current_dose,
     });
     if (error) {
+      void reportAppError({ screen: "pacientes", operation: "salvar_anotacao", stage: "acompanhamento", error, doctorId: user.id });
       toast.error("Erro ao salvar anotação");
       return;
     }
@@ -137,6 +142,7 @@ export default function Dashboard() {
   const handleDeletePatient = async (patientId: string) => {
     const { error } = await supabase.from("patients").delete().eq("id", patientId);
     if (error) {
+      void reportAppError({ screen: "pacientes", operation: "excluir_paciente", stage: "confirmacao", error, doctorId: user?.id });
       toast.error("Erro ao excluir paciente: " + error.message);
       return;
     }

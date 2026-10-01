@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { BrandMark } from "@/components/BrandMark";
 import { ArrowRight, ShieldCheck, FileText, BookOpen, Stethoscope } from "lucide-react";
+import { flushQueuedErrorLogs, reportAppError } from "@/lib/errorLogger";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -26,6 +27,7 @@ export default function Login() {
     });
     setResetting(false);
     if (error) {
+      void reportAppError({ screen: "login", operation: "recuperar_senha", stage: "solicitar_link", error });
       toast.error("Não foi possível enviar: " + error.message);
     } else {
       toast.success("Enviamos um link de redefinição para o seu e-mail.");
@@ -35,11 +37,13 @@ export default function Login() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
     if (error) {
+      void reportAppError({ screen: "login", operation: "entrar", stage: "validar_credenciais", error });
       toast.error("Não foi possível entrar: " + error.message);
     } else {
+      if (data.user) void flushQueuedErrorLogs(data.user.id);
       navigate("/");
     }
   };
