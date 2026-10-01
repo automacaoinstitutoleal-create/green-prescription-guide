@@ -43,6 +43,11 @@ interface PrescriptionInfo {
   isLegalCase?: boolean;
 }
 
+export interface GeneratedPDF {
+  blob: Blob;
+  filename: string;
+}
+
 interface GuideScheduleStep {
   week: number;
   days: string;
@@ -169,9 +174,10 @@ interface ReceitaParams {
   doctor: DoctorInfo;
   patient: PatientInfo;
   prescriptionData: PrescriptionInfo;
+  autoSave?: boolean;
 }
 
-export function generatePrescriptionPDF({ doctor, patient, prescriptionData: pd }: ReceitaParams) {
+export function generatePrescriptionPDF({ doctor, patient, prescriptionData: pd, autoSave = true }: ReceitaParams): GeneratedPDF {
   const doc = new jsPDF();
   const cfg = pd.config;
   const pw = doc.internal.pageSize.getWidth();
@@ -301,7 +307,9 @@ export function generatePrescriptionPDF({ doctor, patient, prescriptionData: pd 
     doctorCrm: doctor.crm,
   });
 
-  doc.save(`receita_${patient.full_name.replace(/\s/g, "_")}_${new Date().toISOString().slice(0, 10)}.pdf`);
+  const filename = `receita_${patient.full_name.replace(/\s/g, "_")}_${new Date().toISOString().slice(0, 10)}.pdf`;
+  if (autoSave) doc.save(filename);
+  return { blob: doc.output("blob"), filename };
 }
 
 // ═══════════════════════════════════════════════════
@@ -313,9 +321,10 @@ interface GuiaParams {
   patient: PatientInfo;
   prescriptionData: PrescriptionInfo;
   product: Product;
+  autoSave?: boolean;
 }
 
-export function generatePatientGuidePDF({ doctor, patient, prescriptionData: pd, product }: GuiaParams) {
+export function generatePatientGuidePDF({ doctor, patient, prescriptionData: pd, product, autoSave = true }: GuiaParams): GeneratedPDF {
   const doc = new jsPDF();
   const cfg = pd.config;
   const { steps: guideScheduleSteps, maxMgDay } = buildPatientGuideSchedule(pd, product);
@@ -596,7 +605,9 @@ export function generatePatientGuidePDF({ doctor, patient, prescriptionData: pd,
     doctorCrm: doctor.crm,
   });
 
-  doc.save(`guia_paciente_${patient.full_name.replace(/\s/g, "_")}_${new Date().toISOString().slice(0, 10)}.pdf`);
+  const filename = `guia_paciente_${patient.full_name.replace(/\s/g, "_")}_${new Date().toISOString().slice(0, 10)}.pdf`;
+  if (autoSave) doc.save(filename);
+  return { blob: doc.output("blob"), filename };
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -644,12 +655,13 @@ interface LegalReportParams {
   healthcareCoverage?: "SUS" | "PLANO" | "PARTICULAR";
   /** Dados do responsável legal — usado quando paciente é menor. */
   legalGuardian?: LegalGuardianInfo | null;
+  autoSave?: boolean;
 }
 
 export function generateLegalReportPDF({
   doctor, patient, prescriptionData: pd, product, answers, customFields,
-  patientAge, healthcareCoverage = "PARTICULAR", legalGuardian,
-}: LegalReportParams) {
+  patientAge, healthcareCoverage = "PARTICULAR", legalGuardian, autoSave = true,
+}: LegalReportParams): GeneratedPDF {
   const doc = new jsPDF();
   const isSUS = healthcareCoverage === "SUS";
   const isMinorWithGuardian = legalGuardian && patientAge != null && patientAge < 18;
@@ -867,6 +879,8 @@ export function generateLegalReportPDF({
     doctorCrm: doctor.crm,
   });
 
-  doc.save(`relatorio_medico_${patient.full_name.replace(/\s/g, "_")}_${new Date().toISOString().slice(0, 10)}.pdf`);
+  const filename = `relatorio_medico_${patient.full_name.replace(/\s/g, "_")}_${new Date().toISOString().slice(0, 10)}.pdf`;
+  if (autoSave) doc.save(filename);
+  return { blob: doc.output("blob"), filename };
 }
 
